@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.log
+npm-debug.log*
+
+# Generated render output + captured leads
+public/renders/*
+!public/renders/.gitkeep
+data/*.json
