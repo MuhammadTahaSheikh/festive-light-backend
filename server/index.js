@@ -8,6 +8,7 @@ import {
   CF_ACCOUNT_ID,
   CF_API_TOKEN,
   STRIPE_WEBHOOK_SECRET,
+  CORS_ORIGINS,
 } from './config/env.js';
 import { PUBLIC_DIR, RENDERS_DIR, CLIENT_DIST } from './config/paths.js';
 import { activeProvider } from './services/render.js';
@@ -17,6 +18,41 @@ import { handleStripeWebhook } from './services/stripeCheckout.js';
 import api from './routes/index.js';
 
 const app = express();
+
+const defaultCorsOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+const allowedOrigins = new Set([...defaultCorsOrigins, ...CORS_ORIGINS]);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  let allow = false;
+  if (origin) {
+    if (allowedOrigins.has(origin)) allow = true;
+    else {
+      try {
+        allow = /\.vercel\.app$/i.test(new URL(origin).hostname);
+      } catch {
+        allow = false;
+      }
+    }
+  }
+  if (allow) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, X-Account-Email, Authorization, Stripe-Signature',
+    );
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
+  }
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  return next();
+});
 
 app.post(
   '/api/credits/stripe-webhook',

@@ -3,7 +3,6 @@ import 'dotenv/config';
 export const PORT = process.env.PORT || 3000;
 export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-console.log('[env] GEMINI_API_KEY:', GEMINI_API_KEY || '(empty)');
 export const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-image';
 export const MAX_FREE_RENDERS = Number(process.env.MAX_FREE_RENDERS || 3);
 
@@ -29,6 +28,12 @@ export const LOB_MAIL_MODE = (process.env.LOB_MAIL_MODE || 'demo').toLowerCase()
 export const LOB_MAIL_ALLOW_WARNINGS = String(process.env.LOB_MAIL_ALLOW_WARNINGS || 'false').toLowerCase() === 'true';
 export const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || '';
 
+/** Comma-separated browser origins allowed to call the API (Vercel, local Vite). */
+export const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 /** BatchData — optional fallback property-owner lookup (https://batchdata.com). */
 export const BATCHDATA_API_KEY = process.env.BATCHDATA_API_KEY || '';
 export const BATCHDATA_SKIP_TRACE = String(process.env.BATCHDATA_SKIP_TRACE || 'false').toLowerCase() === 'true';
@@ -49,3 +54,17 @@ export const MAIL_FROM = {
   state: process.env.MAIL_FROM_STATE || 'TX',
   zip: process.env.MAIL_FROM_ZIP || '78701',
 };
+
+/** Transactional email (design + quote to homeowner) — optional; no-ops if unset. */
+export const SMTP_HOST = process.env.SMTP_HOST || '';
+export const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+export const SMTP_SECURE = String(process.env.SMTP_SECURE || '').toLowerCase() === 'true'
+  || Number(process.env.SMTP_PORT || 587) === 465;
+export const SMTP_USER = process.env.SMTP_USER || '';
+export const SMTP_PASS = process.env.SMTP_PASS || '';
+export const EMAIL_FROM = process.env.EMAIL_FROM || '';
+export const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'Festive Lighting Pros';
+export const EMAIL_REPLY_TO = process.env.EMAIL_REPLY_TO || '';
+
+/** Microsoft Teams channel alerts (Power Automate / Incoming Webhook) — optional. */
+export const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || '';

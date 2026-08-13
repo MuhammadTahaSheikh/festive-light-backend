@@ -21,14 +21,16 @@ export function activeProvider() {
   return 'none';
 }
 
-async function renderWithCloudflare(imageBuffer, prompt) {
+async function renderWithCloudflare(imageBuffer, prompt, { neon = false } = {}) {
+  const classicNegative = 'different house, generic house, redesigned garden, new landscaping, replaced plants, different roof, warped architecture, extra houses, lights on neighboring houses, lit adjacent roofs, deformed windows, changed driveway, new trees, fantasy garden, continuous light strip, solid line of light, light bar, glowing ribbon, merged lights, rope light, widely spaced lights, architectural downlights, recessed can lights, puck spotlights, large pools of wall light, hanging string lights, exposed wires, C9 bulbs, globe bulbs, oversized bulbs, large circular fixtures, fuzzy glowing dots, daytime, bright daylight, overexposed, blurry, low quality, text, watermark, cartoon, painting, neon glow';
+  const neonNegative = 'different house, generic house, redesigned garden, new landscaping, replaced plants, different roof, warped architecture, extra houses, lights on neighboring houses, lit adjacent roofs, deformed windows, changed driveway, new trees, fantasy garden, individual pin LEDs, spaced countable bulbs, C9 bulbs, globe bulbs, star sparkle dots, hanging string lights, exposed wires, architectural downlights, recessed can lights, puck spotlights, daytime, bright daylight, overexposed, blurry, low quality, text, watermark, cartoon, painting';
   const url = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/ai/run/${CF_IMAGE_MODEL}`;
   const resp = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${CF_API_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       prompt,
-      negative_prompt: 'different house, generic house, redesigned garden, new landscaping, replaced plants, different roof, warped architecture, extra houses, lights on neighboring houses, lit adjacent roofs, deformed windows, changed driveway, new trees, fantasy garden, continuous light strip, solid line of light, light bar, glowing ribbon, merged lights, rope light, widely spaced lights, architectural downlights, recessed can lights, puck spotlights, large pools of wall light, hanging string lights, exposed wires, C9 bulbs, globe bulbs, oversized bulbs, large circular fixtures, fuzzy glowing dots, daytime, bright daylight, overexposed, blurry, low quality, text, watermark, cartoon, painting, neon glow',
+      negative_prompt: neon ? neonNegative : classicNegative,
       image: Array.from(imageBuffer),
       strength: CF_STRENGTH,
       num_steps: 20,
@@ -78,16 +80,20 @@ async function renderWithGemini(imageBuffer, mimeType, prompt, { temperature = 0
 export async function doRender(imageBuffer, mimeType, opts) {
   const p = activeProvider();
   const custom = Boolean(opts?.userPrompt && String(opts.userPrompt).trim());
+  const isNeon = opts?.lightStyle === 'neon';
   if (custom) {
     console.log('[render] describe-mode prompt:', String(opts.userPrompt).trim().slice(0, 160));
   }
+  if (isNeon) {
+    console.log('[render] lightStyle=neon');
+  }
   if (p === 'gemini') {
-    const isBrightDim = opts?.scheme === 'bright-dim-1-3';
+    const isBrightDim = !isNeon && opts?.scheme === 'bright-dim-1-3';
     return renderWithGemini(imageBuffer, mimeType, buildRenderPrompt(opts), {
-      // Bright-dim pattern is easy for the model to ignore — keep it tighter.
-      temperature: custom ? 0.7 : isBrightDim ? 0.25 : 0.4,
+      // Lower temperature keeps house geometry stable across re-runs.
+      temperature: custom ? 0.7 : (isBrightDim || isNeon) ? 0.2 : 0.25,
     });
   }
-  if (p === 'cloudflare') return renderWithCloudflare(imageBuffer, buildShortPrompt(opts));
+  if (p === 'cloudflare') return renderWithCloudflare(imageBuffer, buildShortPrompt(opts), { neon: isNeon });
   throw new Error('No render provider configured');
 }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getCampaign,
   listCampaignHomes,
+  findCampaignHomeByRenderId,
   updateCampaignHome,
 } from '../db/campaigns.js';
 import { getPostcardTemplate } from '../db/postcardTemplates.js';
@@ -282,6 +283,8 @@ router.post('/renders/send', async (req, res) => {
 
     for (const render of renders) {
       try {
+        // Reuse owner_name already stored on the linked Outreach home (no owner-API call).
+        const campaignHome = await findCampaignHomeByRenderId(render.id);
         const result = await sendOnePostcard({
           render,
           template,
@@ -289,6 +292,7 @@ router.post('/renders/send', async (req, res) => {
           useLob,
           skipVerify,
           description: `Quote — ${render.address || render.id}`,
+          home: campaignHome,
         });
         if (result.ok) {
           sent++;

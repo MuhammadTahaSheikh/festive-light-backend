@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { saveLead, listLeads } from '../db/index.js';
+import { createdByFromReq } from '../util/createdBy.js';
 
 export const leadRouter = Router();
 export const leadsRouter = Router();
@@ -11,6 +12,7 @@ leadRouter.post('/', async (req, res) => {
     await saveLead({
       name, email, phone, address, source, notes,
       ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress || null,
+      created_by: createdByFromReq(req),
     });
     res.json({ ok: true });
   } catch (err) {

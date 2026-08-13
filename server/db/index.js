@@ -10,6 +10,7 @@ export {
   bulkAddCampaignHomes,
   updateCampaign,
   listCampaignHomes,
+  findCampaignHomeByRenderId,
   updateCampaignHome,
 } from './campaigns.js';
 export {

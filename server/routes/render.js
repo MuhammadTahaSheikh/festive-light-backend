@@ -11,6 +11,9 @@ import { resolveStreetViewForAddress } from '../services/streetviewValidate.js';
 import { estimateRooflineFeet, wholeHouseFeet, priceFromFeet } from '../services/pricing.js';
 import { saveRender, updateCampaignHome, deductCredits, addCredits } from '../db/index.js';
 import { CREDITS_PER_RENDER, DEFAULT_PRICE_PER_FOOT } from '../config/env.js';
+import { createdByFromReq } from '../util/createdBy.js';
+import { sendDesignQuoteEmail } from '../services/email.js';
+import { sendLightUpTeamsAlert } from '../services/teams.js';
 
 function accountKey(req) {
   return req.headers['x-account-email'] || req.body?.accountEmail || 'default';
@@ -40,7 +43,10 @@ router.post('/', async (req, res) => {
     serviceType = 'permanent',
     campaignHomeId = '',
     userPrompt = '',
+    lightStyle = 'classic',
   } = req.body || {};
+
+  const resolvedLightStyle = lightStyle === 'neon' ? 'neon' : 'classic';
 
   let formattedAddress = address;
   let resolvedLat = lat;
@@ -60,6 +66,30 @@ router.post('/', async (req, res) => {
       else { srcBuffer = Buffer.from(imageBase64, 'base64'); }
       if (!srcBuffer || srcBuffer.length < 100) {
         return res.status(400).json({ error: 'bad_image' });
+      }
+      // Additive only: resolve coords for footage when a photo is used with an address.
+      // Does not change Street View / address-only flow below.
+      if (GOOGLE_MAPS_API_KEY && (placeId || address) && (resolvedLat == null || resolvedLng == null)) {
+        try {
+          if (placeId) {
+            const details = await placeDetails(placeId);
+            formattedAddress = details.formattedAddress || formattedAddress;
+            if (details.location) {
+              resolvedLat = details.location.lat;
+              resolvedLng = details.location.lng;
+            }
+          }
+          if ((resolvedLat == null || resolvedLng == null) && address) {
+            const geo = await geocodeAddress(address);
+            if (geo) {
+              resolvedLat = geo.lat;
+              resolvedLng = geo.lng;
+              formattedAddress = geo.formattedAddress || address;
+            }
+          }
+        } catch (e) {
+          console.warn('[render] photo-path geocode skipped:', e.message);
+        }
       }
     } else if (GOOGLE_MAPS_API_KEY) {
       if (placeId) {
@@ -131,6 +161,7 @@ router.post('/', async (req, res) => {
       }
       const rendered = await doRender(srcBuffer, srcMime, {
         scheme, customColors, landscape, decor, decorColor, serviceType, userPrompt,
+        lightStyle: resolvedLightStyle,
       });
       outputBuffer = rendered.buffer;
       outputMime = rendered.mimeType;
@@ -178,6 +209,7 @@ router.post('/', async (req, res) => {
           price_per_foot: rate || null,
           estimated_total: frontPrice,
           lead_email: (req.body && req.body.email) || null,
+          created_by: createdByFromReq(req),
         });
         quoteId = saved?.id || null;
         if (campaignHomeId && quoteId) {
@@ -190,6 +222,39 @@ router.post('/', async (req, res) => {
           } catch (e) {
             console.warn('[render] link campaign home failed:', e.message);
           }
+        }
+        // Additive: email design + quote to the visitor. Never blocks the response.
+        const leadEmail = (req.body && req.body.email) || null;
+        const leadName = (req.body && req.body.name) || '';
+        const leadPhone = (req.body && req.body.phone) || '';
+        const quoteStats = {
+          frontFeet,
+          wholeFeet,
+          frontPrice,
+          wholePrice,
+          rooflineFeet: frontFeet,
+          estimatedTotal: frontPrice,
+        };
+        if (leadEmail && quoteId) {
+          sendDesignQuoteEmail({
+            to: leadEmail,
+            address: formattedAddress,
+            imageUrl,
+            quoteId,
+            stats: quoteStats,
+          }).catch((e) => console.warn('[email] design quote send failed:', e.message));
+        }
+        // Additive: Teams channel alert for sales. Never blocks the response.
+        if (quoteId) {
+          sendLightUpTeamsAlert({
+            address: formattedAddress,
+            name: leadName,
+            email: leadEmail || '',
+            phone: leadPhone,
+            imageUrl,
+            quoteId,
+            stats: quoteStats,
+          }).catch((e) => console.warn('[teams] light-up alert failed:', e.message));
         }
       } catch (e) {
         console.error('[render] saveRender failed:', e.message);

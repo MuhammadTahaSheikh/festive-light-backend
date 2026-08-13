@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { supa, CAMPAIGNS_FILE, HOMES_FILE, readJson, appendJson, writeJson } from './client.js';
+import { supa, CAMPAIGNS_FILE, HOMES_FILE, readJson, appendJson, writeJson, insertRows } from './client.js';
 
 export async function saveCampaign(campaign) {
   const row = {
@@ -8,12 +8,12 @@ export async function saveCampaign(campaign) {
     area: campaign.area || null,
     status: campaign.status || 'active',
     notes: campaign.notes || null,
+    created_by: campaign.created_by || null,
     created_at: new Date().toISOString(),
   };
   if (supa) {
-    const { error } = await supa.from('campaigns').insert(row);
-    if (error) throw new Error(error.message);
-    return row;
+    const inserted = await insertRows('campaigns', row);
+    return inserted[0] || row;
   }
   appendJson(CAMPAIGNS_FILE, row);
   return row;
@@ -51,6 +51,7 @@ function homeRow(home) {
     owner_phone: home.owner_phone || null,
     owner_email: home.owner_email || null,
     notes: home.notes || null,
+    created_by: home.created_by || null,
     created_at: new Date().toISOString(),
   };
   // JSON fallback stores map coordinates; Supabase needs migration 001 for lat/lng columns.
@@ -65,9 +66,8 @@ function homeRow(home) {
 export async function addCampaignHome(home) {
   const row = homeRow(home);
   if (supa) {
-    const { error } = await supa.from('campaign_homes').insert(row);
-    if (error) throw new Error(error.message);
-    return row;
+    const inserted = await insertRows('campaign_homes', row);
+    return inserted[0] || row;
   }
   appendJson(HOMES_FILE, row);
   return row;
@@ -83,7 +83,27 @@ export async function listCampaignHomes(campaignId) {
   return readJson(HOMES_FILE).filter((h) => h.campaign_id === campaignId);
 }
 
-export async function bulkAddCampaignHomes(campaignId, homes) {
+/** Find a campaign home linked to a quote/render (for Quotes page mail preview). Prefers a row with owner_name. */
+export async function findCampaignHomeByRenderId(renderId) {
+  if (!renderId) return null;
+  if (supa) {
+    const { data, error } = await supa
+      .from('campaign_homes')
+      .select('*')
+      .eq('render_id', renderId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error) throw new Error(error.message);
+    const rows = data || [];
+    return rows.find((h) => String(h.owner_name || '').trim()) || rows[0] || null;
+  }
+  const rows = readJson(HOMES_FILE)
+    .filter((h) => h.render_id === renderId)
+    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  return rows.find((h) => String(h.owner_name || '').trim()) || rows[0] || null;
+}
+
+export async function bulkAddCampaignHomes(campaignId, homes, createdBy = null) {
   if (!homes?.length) return { added: [], skipped: 0 };
   const existing = await listCampaignHomes(campaignId);
   const seen = new Set(existing.map((h) => (h.address || '').toLowerCase().trim()));
@@ -95,13 +115,16 @@ export async function bulkAddCampaignHomes(campaignId, homes) {
     const key = addr.toLowerCase();
     if (seen.has(key)) { skipped++; continue; }
     seen.add(key);
-    toAdd.push(homeRow({ ...h, campaign_id: campaignId }));
+    toAdd.push(homeRow({
+      ...h,
+      campaign_id: campaignId,
+      created_by: h.created_by || createdBy || null,
+    }));
   }
   if (!toAdd.length) return { added: [], skipped };
 
   if (supa) {
-    const { data, error } = await supa.from('campaign_homes').insert(toAdd).select();
-    if (error) throw new Error(error.message);
+    const data = await insertRows('campaign_homes', toAdd);
     return { added: data || [], skipped };
   }
   const rows = readJson(HOMES_FILE);

@@ -11,6 +11,7 @@ import {
 } from '../db/index.js';
 import { campaignStats } from '../services/pricing.js';
 import { ownerLookupEnabled, ownerLookupStatus, lookupOwnersByAddress } from '../services/ownerLookup.js';
+import { createdByFromReq } from '../util/createdBy.js';
 
 const router = Router();
 
@@ -26,7 +27,15 @@ router.post('/', async (req, res) => {
   const { name = '', area = '', notes = '' } = req.body || {};
   if (!name.trim()) return res.status(400).json({ error: 'missing_name' });
   try {
-    res.json({ ok: true, campaign: await saveCampaign({ name: name.trim(), area: area.trim(), notes }) });
+    res.json({
+      ok: true,
+      campaign: await saveCampaign({
+        name: name.trim(),
+        area: area.trim(),
+        notes,
+        created_by: createdByFromReq(req),
+      }),
+    });
   } catch (err) {
     res.status(500).json({ error: 'campaign_failed', detail: String(err.message || err) });
   }
@@ -50,7 +59,7 @@ router.post('/:id/homes/bulk', async (req, res) => {
   try {
     const campaign = await getCampaign(req.params.id);
     if (!campaign) return res.status(404).json({ error: 'not_found' });
-    const result = await bulkAddCampaignHomes(req.params.id, homes);
+    const result = await bulkAddCampaignHomes(req.params.id, homes, createdByFromReq(req));
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ error: 'bulk_failed', detail: String(err.message || err) });
@@ -167,6 +176,7 @@ router.post('/:id/homes', async (req, res) => {
       lat, lng, place_id,
       estimated_total,
       owner_name, owner_phone, owner_email,
+      created_by: createdByFromReq(req),
     });
     res.json({ ok: true, home });
   } catch (err) {

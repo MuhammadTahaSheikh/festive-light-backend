@@ -37,3 +37,22 @@ export function appendJson(file, row) {
 export function writeJson(file, rows) {
   fs.writeFileSync(file, JSON.stringify(rows, null, 2));
 }
+
+/** True when Supabase rejects a missing created_by column (migration not applied yet). */
+export function isMissingCreatedByColumn(error) {
+  return /created_by|schema cache/i.test(String(error?.message || error || ''));
+}
+
+/**
+ * Insert row(s). If created_by column is missing, retry without it so the app keeps working.
+ */
+export async function insertRows(table, rows) {
+  const list = Array.isArray(rows) ? rows : [rows];
+  const { data, error } = await supa.from(table).insert(list).select();
+  if (!error) return data || list;
+  if (!isMissingCreatedByColumn(error)) throw new Error(error.message);
+  const stripped = list.map(({ created_by: _cb, ...rest }) => rest);
+  const retry = await supa.from(table).insert(stripped).select();
+  if (retry.error) throw new Error(retry.error.message);
+  return retry.data || stripped;
+}

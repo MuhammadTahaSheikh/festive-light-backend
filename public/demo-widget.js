@@ -49,8 +49,9 @@
       scheme: 'warm-white',
       customColors: [{ hex: '#e21d1d', name: '' }, { hex: '#ffffff', name: '' }, { hex: '#1d6fe2', name: '' }],
       brightDimColor: { hex: '#fff3d6', name: '' },
-      landscape: false, decor: 'none', decorColor: 'warm-white',
+      landscape: true, decor: 'none', decorColor: 'warm-white',
       mode: 'quick', userPrompt: '',
+      lightStyle: 'classic',
     };
 
     var chipHtml = COLOR_CHIPS.map(function (c, i) {
@@ -65,6 +66,17 @@
       '<div class="flpw">' +
         '<h3>See your home lit up — free</h3>' +
         '<p class="sub" data-f="sub">Upload a photo of your home, pick your colors, and watch it light up. Instant design + estimate. No cost, no pressure.</p>' +
+
+        '<div class="style-toggle" role="tablist" aria-label="Light style">' +
+          '<button type="button" class="style-opt on" role="tab" aria-selected="true" data-style="classic">' +
+            '<span class="style-opt-thumb"><img src="/style-previews/classic.png?v=2" alt=""></span>' +
+            '<span class="style-opt-text"><span class="style-opt-label">Classic LEDs</span><span class="style-opt-sub">Permanent pin lights</span></span>' +
+          '</button>' +
+          '<button type="button" class="style-opt" role="tab" aria-selected="false" data-style="neon">' +
+            '<span class="style-opt-thumb"><img src="/style-previews/neon.png?v=2" alt=""></span>' +
+            '<span class="style-opt-text"><span class="style-opt-label">Neon</span><span class="style-opt-sub">Continuous eave glow</span></span>' +
+          '</button>' +
+        '</div>' +
 
         '<div class="mode-toggle" role="tablist" aria-label="Render mode">' +
           '<button type="button" class="mode-btn on" role="tab" aria-selected="true" data-mode="quick">Quick pick</button>' +
@@ -98,7 +110,7 @@
               '<div class="ccs" data-f="bdimcolors"></div>' +
             '</div>' +
 
-            '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:16px;"><input type="checkbox" data-f="landscape" style="width:auto;margin:0;"> Add landscape lighting</label>' +
+            '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:16px;"><input type="checkbox" data-f="landscape" checked style="width:auto;margin:0;"> Add landscape lighting</label>' +
 
             '<label>Holiday decorations</label>' +
             '<div class="chips" data-f="decor">' +
@@ -182,6 +194,19 @@
 
     w.querySelectorAll('.mode-btn').forEach(function (btn) {
       btn.addEventListener('click', function () { applyMode(btn.getAttribute('data-mode')); });
+    });
+
+    function applyLightStyle(style) {
+      state.lightStyle = style === 'neon' ? 'neon' : 'classic';
+      w.querySelectorAll('.style-opt').forEach(function (btn) {
+        var on = btn.getAttribute('data-style') === state.lightStyle;
+        btn.classList.toggle('on', on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      qf('err').style.display = 'none';
+    }
+    w.querySelectorAll('.style-opt').forEach(function (btn) {
+      btn.addEventListener('click', function () { applyLightStyle(btn.getAttribute('data-style')); });
     });
 
     var promptEl = qf('prompt');
@@ -390,6 +415,7 @@
         imageBase64: state.imageBase64 || undefined, email: email || undefined,
         pricePerFoot: rate,
       };
+      if (state.lightStyle === 'neon') body.lightStyle = 'neon';
 
       if (isDescribe && !previewOnly) {
         body.userPrompt = promptText.slice(0, 800);

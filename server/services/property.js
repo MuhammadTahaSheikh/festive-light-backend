@@ -61,7 +61,14 @@ function edgeLensM(coords) {
   return out.sort((a, b) => b - a);
 }
 
-async function osmBuildingSqft(lat, lng) {
+const OSM_CACHE = new Map();
+const OSM_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — same lot should not flip footage mid-session
+
+function cacheKey(lat, lng) {
+  return `${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}`;
+}
+
+async function osmBuildingSqftOnce(lat, lng) {
   const query = `[out:json][timeout:25];way(around:35,${lat},${lng})["building"];out geom;`;
   let data;
   try {
@@ -101,6 +108,22 @@ async function osmBuildingSqft(lat, lng) {
   };
 }
 
+/** OSM footprint with one retry + short cache (Overpass flakiness was flipping quotes). */
+async function osmBuildingSqft(lat, lng) {
+  const key = cacheKey(lat, lng);
+  const hit = OSM_CACHE.get(key);
+  if (hit && Date.now() - hit.at < OSM_CACHE_TTL_MS) return hit.value;
+
+  let osm = await osmBuildingSqftOnce(lat, lng);
+  if (!osm) {
+    await new Promise((r) => setTimeout(r, 400));
+    osm = await osmBuildingSqftOnce(lat, lng);
+  }
+  // Cache successes only — never lock in a failed lookup.
+  if (osm) OSM_CACHE.set(key, { at: Date.now(), value: osm });
+  return osm;
+}
+
 /** Building footprint sqft for a lat/lng (not interior living area). */
 export async function fetchBuildingSqft(lat, lng) {
   if (lat == null || lng == null) return null;
@@ -121,6 +144,8 @@ export async function fetchBuildingSqft(lat, lng) {
     /* optional */
   }
 
+  // Prefer OSM perimeter for roofline footage. Solar-only (no perimeter) used to
+  // yield a very different estimate (~110 ft) when Overpass briefly failed.
   if (solar && osm) {
     return {
       sqft: Math.max(solar.sqft, osm.sqft),
@@ -130,5 +155,5 @@ export async function fetchBuildingSqft(lat, lng) {
       source: 'google_solar+osm_footprint',
     };
   }
-  return solar || osm;
+  return osm || solar;
 }

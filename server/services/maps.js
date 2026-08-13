@@ -213,8 +213,7 @@ async function osmAutocompleteAddress(input) {
   const data = await resp.json();
   if (!resp.ok) throw Object.assign(new Error('places_error'), { detail: data });
   return (data.features || []).map((f) => {
-    const p = f.properties || {};
-    const line1 = [p.housenumber, p.street || p.name].filter(Boolean).join(' ') || p.name || '';
+    const p = f.properties || {};    const line1 = [p.housenumber, p.street || p.name].filter(Boolean).join(' ') || p.name || '';
     const line2 = [p.city || p.town || p.village, p.state, p.postcode, p.country]
       .filter(Boolean).join(', ');
     return {

@@ -3,7 +3,8 @@ import { GEMINI_API_KEY } from '../config/env.js';
 import { fetchBuildingSqft } from './property.js';
 
 const genai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
-const VALIDATE_MODEL = process.env.GEMINI_VALIDATE_MODEL || 'gemini-2.0-flash';
+// gemini-2.0-flash was shut down June 2026; use a current Flash model for the vision check.
+const VALIDATE_MODEL = process.env.GEMINI_VALIDATE_MODEL || 'gemini-3.5-flash';
 
 const VALIDATE_PROMPT = `You validate Google Street View photos for a permanent roofline lighting app.
 

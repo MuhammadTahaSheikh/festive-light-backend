@@ -1,7 +1,18 @@
 node_modules/
+client/node_modules/
 .env
 *.log
 npm-debug.log*
+
+# Local / editor
+.cursor/
+*.pdf
+
+# Local clones used by scripts/sync-push-gitlab.js
+.gitlab-mirrors/
+
+# Build output
+client/dist/
 
 # Generated render output + captured leads
 public/renders/*

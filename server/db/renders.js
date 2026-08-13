@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { supa, RENDERS_FILE, readJson, appendJson } from './client.js';
+import { supa, RENDERS_FILE, readJson, appendJson, insertRows } from './client.js';
 
 export async function saveRender(render) {
   const row = {
@@ -13,12 +13,12 @@ export async function saveRender(render) {
     price_per_foot: render.price_per_foot ?? null,
     estimated_total: render.estimated_total ?? null,
     lead_email: render.lead_email || null,
+    created_by: render.created_by || null,
     created_at: new Date().toISOString(),
   };
   if (supa) {
-    const { error } = await supa.from('renders').insert(row);
-    if (error) throw new Error(error.message);
-    return row;
+    const inserted = await insertRows('renders', row);
+    return inserted[0] || row;
   }
   appendJson(RENDERS_FILE, row);
   return row;

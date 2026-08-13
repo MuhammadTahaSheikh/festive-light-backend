@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { supa, LEADS_FILE, readJson, appendJson } from './client.js';
+import { supa, LEADS_FILE, appendJson, insertRows, readJson } from './client.js';
 
 export async function saveLead(lead) {
   const row = {
@@ -11,12 +11,12 @@ export async function saveLead(lead) {
     source: lead.source || 'widget',
     notes: lead.notes || null,
     ip: lead.ip || null,
+    created_by: lead.created_by || null,
     created_at: new Date().toISOString(),
   };
   if (supa) {
-    const { error } = await supa.from('leads').insert(row);
-    if (error) throw new Error(error.message);
-    return row;
+    const inserted = await insertRows('leads', row);
+    return inserted[0] || row;
   }
   appendJson(LEADS_FILE, row);
   return row;
