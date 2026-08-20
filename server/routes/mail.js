@@ -35,10 +35,9 @@ function accountKey(req) {
 function filterMailableHomes(homes, { homeIds = [], unmailedOnly = false, liveOnly = false } = {}) {
   let list = homes.filter((h) => {
     if (!h.render_id) return false;
-    if (h.status === 'rendered') return true;
-    // Legacy rows: demo preview used to bump status to quote_sent.
-    if (!liveOnly && h.status === 'quote_sent' && h.mail_status === 'mail_demo') return true;
-    return false;
+    if (liveOnly) return h.status === 'rendered';
+    // Preview PDFs for quoted homes, including ones already mailed.
+    return h.status === 'rendered' || h.status === 'quote_sent';
   });
   if (homeIds.length) {
     const set = new Set(homeIds);
@@ -429,7 +428,9 @@ router.post('/campaigns/:id/send', async (req, res) => {
     if (!homes.length) {
       return res.status(400).json({
         error: 'no_mailable_homes',
-        detail: 'Load houses, make quotes first — only rendered homes can be mailed.',
+        detail: useLob
+          ? 'No unmailed rendered homes. Reset mail status to send again, or preview the PDF instead.'
+          : 'No homes with quotes to preview. Make a quote first.',
       });
     }
 
