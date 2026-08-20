@@ -173,7 +173,7 @@ async function sendOnePostcard({
     priceFormatted: formatPrice(pricing.frontPrice),
     ownerName,
   });
-  if (!to) {
+  if (!to && useLob) {
     to = (await verifyAddressForMail(address, {
       lat: campaignHome?.lat ?? render.lat ?? null,
       lng: campaignHome?.lng ?? render.lng ?? null,
@@ -424,7 +424,8 @@ router.post('/campaigns/:id/send', async (req, res) => {
 
       try {
         let to;
-        if (!skipVerify) {
+        // Preview/demo must still build PDFs. USPS checks are live-mail only.
+        if (useLob && !skipVerify) {
           const verification = await verifyAddressForMail(home.address);
           if (!verification.ok) {
             skippedAddress++;
