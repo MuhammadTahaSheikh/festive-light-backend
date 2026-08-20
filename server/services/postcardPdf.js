@@ -2,13 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
+import sharp from 'sharp';
 import {
   POSTCARD_W_IN,
   POSTCARD_H_IN,
 } from './postcardStarters.js';
 import { resolveElementContent, formatPrice } from './postcardMerge.js';
 import { resolveQuotePricing } from './pricing.js';
-import { PUBLIC_DIR } from '../config/paths.js';
+import { PUBLIC_DIR, RENDERS_DIR } from '../config/paths.js';
+import { PORT, PUBLIC_BASE_URL } from '../config/env.js';
 import { ownerFirstName } from './ownerLookup.js';
 
 const IN = 72; // points per inch
@@ -96,7 +98,67 @@ function drawFittedImage(doc, source, x, y, w, h) {
   doc.image(source, x, y, { cover: [w, h], align: 'center', valign: 'center' });
 }
 
-function drawElement(doc, el, ctx) {
+async function toJpegBuffer(buf) {
+  try {
+    return await sharp(buf).rotate().jpeg({ quality: 88 }).toBuffer();
+  } catch {
+    return buf;
+  }
+}
+
+async function fetchImageBuffer(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    console.warn('[postcardPdf] fetch failed', url, err.message);
+    return null;
+  }
+}
+
+/** Load a house photo for PDFKit: local file, then HTTP, then JPEG-normalize. */
+export async function loadRenderImage(imageRef) {
+  if (!imageRef) return null;
+  const raw = String(imageRef).trim().split('?')[0];
+  if (!raw) return null;
+
+  const isHttp = /^https?:\/\//i.test(raw);
+  const rel = raw.replace(/^\//, '');
+  const basename = path.basename(isHttp ? (() => {
+    try { return new URL(raw).pathname; } catch { return rel; }
+  })() : rel);
+  const localPaths = [
+    !isHttp ? path.join(PUBLIC_DIR, rel) : null,
+    path.join(RENDERS_DIR, basename),
+  ].filter(Boolean);
+
+  for (const fp of localPaths) {
+    if (fp && fs.existsSync(fp)) {
+      return toJpegBuffer(fs.readFileSync(fp));
+    }
+  }
+
+  const urls = [];
+  if (isHttp) urls.push(raw);
+  if (basename && !basename.includes('..')) {
+    urls.push(`http://127.0.0.1:${PORT || 3100}/renders/${basename}`);
+  }
+  const publicBase = (PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  if (publicBase && !isHttp) {
+    urls.push(`${publicBase}${raw.startsWith('/') ? raw : `/${raw}`}`);
+  }
+
+  for (const url of urls) {
+    const buf = await fetchImageBuffer(url);
+    if (buf?.length) return toJpegBuffer(buf);
+  }
+
+  console.warn('[postcardPdf] missing render image:', imageRef);
+  return null;
+}
+
+async function drawElement(doc, el, ctx) {
   const x = (el.x || 0) * IN;
   const y = (el.y || 0) * IN;
   const w = (el.w || 1) * IN;
@@ -106,20 +168,18 @@ function drawElement(doc, el, ctx) {
   const align = el.align || 'left';
 
   if (el.type === 'render') {
-    const rel = ctx.renderImagePath;
-    const filePath = rel ? path.join(PUBLIC_DIR, rel.replace(/^\//, '')) : null;
-    if (filePath && fs.existsSync(filePath)) {
+    const source = await loadRenderImage(ctx.renderImagePath);
+    if (source) {
       try {
-        drawFittedImage(doc, filePath, x, y, w, h);
-      } catch {
-        doc.rect(x, y, w, h).fill('#1b1b1f');
-        doc.fillColor('#666').fontSize(10).text('[Render]', x, y + h / 2 - 5, { width: w, align: 'center' });
+        drawFittedImage(doc, source, x, y, w, h);
+        return;
+      } catch (err) {
+        console.warn('[postcardPdf] embed render failed:', err.message);
       }
-    } else {
-      doc.rect(x, y, w, h).fill('#1b1b1f');
-      doc.fillColor('#666').fontSize(10).text('[Render]', x, y + h / 2 - 5, { width: w, align: 'center' });
     }
-    return Promise.resolve();
+    doc.rect(x, y, w, h).fill('#1b1b1f');
+    doc.fillColor('#666').fontSize(10).text('[Render]', x, y + h / 2 - 5, { width: w, align: 'center' });
+    return;
   }
 
   if (el.type === 'qr') {
