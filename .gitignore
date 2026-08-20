@@ -8,11 +8,14 @@ npm-debug.log*
 .cursor/
 *.pdf
 
-# Local clones used by scripts/sync-push-gitlab.js
+# Local clones used by scripts/sync-push-github.js
+.github-mirrors/
+# Leftover unused local clones (do not commit)
 .gitlab-mirrors/
 
 # Build output
 client/dist/
+client/vercel-out/
 
 # Generated render output + captured leads
 public/renders/*

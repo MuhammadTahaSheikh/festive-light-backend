@@ -1,1 +1,1 @@
-# Local data (gitignored JSON lives here)\n
+# Local data (gitignored JSON lives here)

@@ -17,7 +17,7 @@
     "setup:outreach": "node scripts/setup-outreach-columns.js",
     "setup:created-by": "node scripts/setup-created-by.js",
     "hooks:install": "node scripts/install-git-hooks.js",
-    "push:split": "node scripts/sync-push-gitlab.js"
+    "push:split": "node scripts/sync-push-github.js"
   },
   "dependencies": {
     "@google/genai": "^1.9.0",
