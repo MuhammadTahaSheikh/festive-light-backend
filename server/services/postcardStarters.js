@@ -2,6 +2,10 @@
 
 export const POSTCARD_W_IN = 9;
 export const POSTCARD_H_IN = 6;
+/** Lob 6×9 files must include 1/8" bleed on each side (9.25 × 6.25). */
+export const POSTCARD_BLEED_IN = 0.125;
+export const POSTCARD_PDF_W_IN = POSTCARD_W_IN + POSTCARD_BLEED_IN * 2;
+export const POSTCARD_PDF_H_IN = POSTCARD_H_IN + POSTCARD_BLEED_IN * 2;
 
 export const STARTER_TEMPLATES = [
   {

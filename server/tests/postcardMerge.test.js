@@ -1,8 +1,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseMailingAddress, formatPrice, mergeTemplateText } from '../services/postcardMerge.js';
-import { STARTER_TEMPLATES } from '../services/postcardStarters.js';
-import { personalizeFrontImage } from '../services/postcardPdf.js';
+import { STARTER_TEMPLATES, POSTCARD_PDF_W_IN, POSTCARD_PDF_H_IN } from '../services/postcardStarters.js';
+import { personalizeFrontImage, elementPdfBox } from '../services/postcardPdf.js';
 
 describe('postcardMerge', () => {
   test('parseMailingAddress parses US format', () => {
@@ -52,5 +52,18 @@ describe('postcardMerge', () => {
     assert.equal(house.type, 'render');
     assert.equal(house.src, undefined);
     assert.equal(personalized.front.elements.find((el) => el.id === 'logo').type, 'logo');
+  });
+
+  test('Lob 6x9 PDF page includes 0.125in bleed', () => {
+    assert.equal(POSTCARD_PDF_W_IN, 9.25);
+    assert.equal(POSTCARD_PDF_H_IN, 6.25);
+    const inset = elementPdfBox({ type: 'text', x: 0.5, y: 0.4, w: 8, h: 0.6 });
+    assert.equal(inset.x, 0.625 * 72);
+    assert.equal(inset.y, 0.525 * 72);
+    const fullBleed = elementPdfBox({ type: 'render', x: 0, y: 0, w: 9, h: 6 });
+    assert.equal(fullBleed.x, 0);
+    assert.equal(fullBleed.y, 0);
+    assert.equal(fullBleed.w, 9.25 * 72);
+    assert.equal(fullBleed.h, 6.25 * 72);
   });
 });

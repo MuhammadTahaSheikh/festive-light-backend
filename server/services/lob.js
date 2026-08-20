@@ -195,6 +195,7 @@ export async function sendPostcardViaLob({ to, frontUrl, backUrl, description })
     back,
     size: '6x9',
     mail_type: 'usps_first_class',
+    use_type: 'marketing',
   });
 }
 

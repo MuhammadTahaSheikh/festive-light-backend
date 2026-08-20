@@ -6,6 +6,9 @@ import sharp from 'sharp';
 import {
   POSTCARD_W_IN,
   POSTCARD_H_IN,
+  POSTCARD_BLEED_IN,
+  POSTCARD_PDF_W_IN,
+  POSTCARD_PDF_H_IN,
 } from './postcardStarters.js';
 import { resolveElementContent, formatPrice } from './postcardMerge.js';
 import { resolveQuotePricing } from './pricing.js';
@@ -14,7 +17,42 @@ import { PORT, PUBLIC_BASE_URL } from '../config/env.js';
 import { ownerFirstName } from './ownerLookup.js';
 
 const IN = 72; // points per inch
-const PAGE_SIZE = [POSTCARD_W_IN * IN, POSTCARD_H_IN * IN];
+const PAGE_SIZE = [POSTCARD_PDF_W_IN * IN, POSTCARD_PDF_H_IN * IN];
+const EDGE_EPS = 0.05;
+
+/**
+ * Map template inches (9×6 trim) onto the Lob bleed page (9.25×6.25).
+ * Edge-to-edge art extends into the 1/8" bleed so trim does not leave a gap.
+ */
+export function elementPdfBox(el) {
+  let x = Number(el.x) || 0;
+  let y = Number(el.y) || 0;
+  let w = Number(el.w) || 1;
+  let h = Number(el.h) || 1;
+  const extend = el.type === 'render' || el.type === 'image' || el.type === 'logo' || el.type === 'rect';
+  if (extend) {
+    if (x <= EDGE_EPS) {
+      w += x + POSTCARD_BLEED_IN;
+      x = -POSTCARD_BLEED_IN;
+    }
+    if (y <= EDGE_EPS) {
+      h += y + POSTCARD_BLEED_IN;
+      y = -POSTCARD_BLEED_IN;
+    }
+    if (x + w >= POSTCARD_W_IN - EDGE_EPS) {
+      w = POSTCARD_W_IN + POSTCARD_BLEED_IN - x;
+    }
+    if (y + h >= POSTCARD_H_IN - EDGE_EPS) {
+      h = POSTCARD_H_IN + POSTCARD_BLEED_IN - y;
+    }
+  }
+  return {
+    x: (x + POSTCARD_BLEED_IN) * IN,
+    y: (y + POSTCARD_BLEED_IN) * IN,
+    w: w * IN,
+    h: h * IN,
+  };
+}
 
 /** When z-index ties, draw house photo first, then text/price, then QR on top. */
 const LAYER_ORDER = { render: 0, image: 0, logo: 0, rect: 1, text: 2, price: 2, address: 2, qr: 3 };
@@ -159,10 +197,7 @@ export async function loadRenderImage(imageRef) {
 }
 
 async function drawElement(doc, el, ctx) {
-  const x = (el.x || 0) * IN;
-  const y = (el.y || 0) * IN;
-  const w = (el.w || 1) * IN;
-  const h = (el.h || 1) * IN;
+  const { x, y, w, h } = elementPdfBox(el);
   const color = el.color || '#ffffff';
   const fontSize = el.fontSize || 14;
   const align = el.align || 'left';
@@ -226,7 +261,7 @@ async function drawElement(doc, el, ctx) {
 async function drawSide(doc, side, ctx) {
   const cleaned = stripCoveredRenderSlots(side);
   const bg = cleaned?.background || '#0b0b0d';
-  doc.rect(0, 0, POSTCARD_W_IN * IN, POSTCARD_H_IN * IN).fill(bg);
+  doc.rect(0, 0, POSTCARD_PDF_W_IN * IN, POSTCARD_PDF_H_IN * IN).fill(bg);
   const elements = sortElements(cleaned?.elements || []);
   for (const el of elements) {
     await drawElement(doc, el, ctx);
