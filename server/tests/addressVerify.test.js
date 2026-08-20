@@ -8,6 +8,7 @@ import {
 import {
   deliverabilityMessage,
   isMailableDeliverability,
+  isLobAccountError,
   DELIVERABLE_OK,
   DELIVERABLE_WARN,
 } from '../services/lob.js';
@@ -60,5 +61,13 @@ describe('address verification helpers', () => {
     assert.match(deliverabilityMessage('deliverable'), /USPS deliverable/i);
     assert.match(deliverabilityMessage('deliverable_missing_unit'), /Missing apartment/i);
     assert.match(deliverabilityMessage('undeliverable'), /does not deliver/i);
+  });
+
+  test('isLobAccountError detects billing setup errors', () => {
+    assert.equal(
+      isLobAccountError('In order to create a live mail piece, your account needs to set up a billing address'),
+      true,
+    );
+    assert.equal(isLobAccountError('USPS does not deliver to this address'), false);
   });
 });

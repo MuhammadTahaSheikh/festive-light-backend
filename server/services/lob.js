@@ -55,6 +55,16 @@ export function isMailableDeliverability(deliverability, { allowWarnings = LOB_M
   return false;
 }
 
+/** Lob account/setup errors — not a problem with the recipient street address. */
+export function isLobAccountError(message = '') {
+  return /billing address|payment method|live mail piece|payment on file|account needs/i.test(String(message || ''));
+}
+
+export function isLobVerifyServiceFailure(verification) {
+  return verification?.source === 'lob_error'
+    || verification?.deliverability === 'verification_failed';
+}
+
 function lobToFromVerification(data, parsed) {
   const to = parsedToLobTo(parsed);
   to.name = parsed.name || 'Homeowner';

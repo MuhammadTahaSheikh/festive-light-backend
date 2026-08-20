@@ -20,6 +20,8 @@ import {
   verifyAddressForMail,
   shouldVerifyWithLob,
   mailConfigStatus,
+  isLobAccountError,
+  isLobVerifyServiceFailure,
 } from '../services/lob.js';
 import { LOB_MAIL_MODE, PUBLIC_BASE_URL } from '../config/env.js';
 import { resolveQuotePricing } from '../services/pricing.js';
@@ -110,6 +112,14 @@ async function markAddressInvalid(home, verification) {
   }
 }
 
+function lobBillingPayload(message) {
+  const detail = String(message || 'Lob account is not ready for live mail.');
+  return {
+    error: 'lob_billing',
+    detail: `${detail} Add a billing address and payment method at dashboard.lob.com, then try Mail again. This house is not a bad address.`,
+  };
+}
+
 async function sendOnePostcard({
   render,
   template,
@@ -119,6 +129,7 @@ async function sendOnePostcard({
   description,
   onSent,
   home: campaignHome = null,
+  to: providedTo = null,
 }) {
   const address = campaignHome?.address || render.address || '';
   const ownerName = campaignHome?.owner_name || '';
@@ -143,7 +154,7 @@ async function sendOnePostcard({
     };
   }
 
-  let to;
+  let to = providedTo || null;
   const mailAddress = campaignHome?.address || render.address || address;
   if (!skipVerify && useLob) {
     const verification = await verifyAddressForMail(mailAddress, {
@@ -151,11 +162,12 @@ async function sendOnePostcard({
       lng: campaignHome?.lng ?? render.lng ?? null,
     });
     if (!verification.ok) {
+      const accountError = isLobAccountError(verification.message);
       return {
         renderId: render.id,
         address,
         ok: false,
-        error: 'undeliverable_address',
+        error: accountError ? 'lob_billing' : (isLobVerifyServiceFailure(verification) ? 'lob_verify_failed' : 'undeliverable_address'),
         deliverability: verification.deliverability,
         message: verification.message,
         source: verification.source,
@@ -183,14 +195,25 @@ async function sendOnePostcard({
     to = { ...to, name: ownerName };
   }
 
-  const lobResult = useLob
-    ? await sendPostcardViaLob({
-        to,
-        frontUrl: urls.frontUrl,
-        backUrl: urls.backUrl,
-        description: description || home.address,
-      })
-    : await sendPostcardDemo({ homeId: render.id });
+  let lobResult;
+  try {
+    lobResult = useLob
+      ? await sendPostcardViaLob({
+          to,
+          frontUrl: urls.frontUrl,
+          backUrl: urls.backUrl,
+          description: description || home.address,
+        })
+      : await sendPostcardDemo({ homeId: render.id });
+  } catch (e) {
+    return {
+      renderId: render.id,
+      address,
+      ok: false,
+      error: isLobAccountError(e.message) ? 'lob_billing' : 'lob_send_failed',
+      message: e.message || 'Failed to send postcard via Lob',
+    };
+  }
 
   if (onSent) await onSent(lobResult);
 
@@ -296,6 +319,8 @@ router.post('/renders/send', async (req, res) => {
         });
         if (result.ok) {
           sent++;
+        } else if (result.error === 'lob_billing') {
+          return res.status(402).json(lobBillingPayload(result.message));
         } else {
           failed++;
           if (result.error === 'undeliverable_address') skippedAddress++;
@@ -426,10 +451,29 @@ router.post('/campaigns/:id/send', async (req, res) => {
         let to;
         // Preview/demo must still build PDFs. USPS checks are live-mail only.
         if (useLob && !skipVerify) {
-          const verification = await verifyAddressForMail(home.address);
+          const verification = await verifyAddressForMail(home.address, {
+            lat: home.lat,
+            lng: home.lng,
+          });
           if (!verification.ok) {
-            skippedAddress++;
+            if (isLobAccountError(verification.message)) {
+              return res.status(402).json(lobBillingPayload(verification.message));
+            }
             failed++;
+            if (isLobVerifyServiceFailure(verification)) {
+              results.push({
+                homeId: home.id,
+                renderId: render.id,
+                address: home.address,
+                ok: false,
+                error: 'lob_verify_failed',
+                deliverability: verification.deliverability,
+                message: verification.message,
+                source: verification.source,
+              });
+              continue;
+            }
+            skippedAddress++;
             await markAddressInvalid(home, verification);
             results.push({
               homeId: home.id,
@@ -456,6 +500,7 @@ router.post('/campaigns/:id/send', async (req, res) => {
           base,
           useLob,
           skipVerify: true,
+          to,
           home,
           description: `${campaign.name} — ${home.address}`,
           onSent: async (lobResult) => {
@@ -485,12 +530,17 @@ router.post('/campaigns/:id/send', async (req, res) => {
         if (result.ok) {
           sent++;
           results.push({ homeId: home.id, ...result, mailedTo: to || result.mailedTo });
+        } else if (result.error === 'lob_billing') {
+          return res.status(402).json(lobBillingPayload(result.message));
         } else {
           failed++;
           if (result.error === 'undeliverable_address') skippedAddress++;
           results.push({ homeId: home.id, ...result });
         }
       } catch (e) {
+        if (isLobAccountError(e.message)) {
+          return res.status(402).json(lobBillingPayload(e.message));
+        }
         failed++;
         results.push({ homeId: home.id, address: home.address, ok: false, error: String(e.message || e) });
       }
