@@ -282,14 +282,6 @@ const PRESERVE_HOUSE_FOR_PROMPT = [
   'Keep the same house identity and camera angle so it is clearly still this home — do not replace it with a different building or a drawing.',
 ].join(' ');
 
-/** Landscape = wrap foundation bushes only. Trees stay completely dark. */
-const LANDSCAPE_FRONT_BUSHES_ONLY = [
-  'LANDSCAPE LIGHTING (strict): wrap existing bushes and shrubs that sit EXACTLY in front of the house — foundation plantings directly under the front windows and along the front facade — with dense string/net lights matching the roofline color.',
-  'CRITICAL — TREES STAY COMPLETELY DARK: do NOT wrap, uplight, sparkle, or add any lights to trees of any kind (large yard trees, leafless deciduous trees, evergreens, palms, or small trees). Trunks and branches must remain unlit natural silhouettes.',
-  'FORBIDDEN: lighting bushes that are not exactly in front of the house (garage-end, side-yard, driveway-end, or far-left/far-right yard shrubs stay unlit).',
-  'Keep existing path/stake lights along the driveway or walk if adding landscape lighting. Do not add new plants or redesign landscaping.',
-].join(' ');
-
 /** Sanitize optional free-text direction from the Describe mode. */
 export function sanitizeUserPrompt(raw) {
   if (raw == null) return '';
@@ -387,8 +379,8 @@ export function buildRenderPrompt({ scheme, customColors, landscape, decor, deco
   if (landscape) {
     lines.push(
       isBrightDim
-        ? LANDSCAPE_FRONT_BUSHES_ONLY + ' Ground/plant lighting only. Do NOT add warm soffit cans, wall washes, or any second roofline system.'
-        : LANDSCAPE_FRONT_BUSHES_ONLY
+        ? 'OPTIONAL ONLY: subtle warm-white uplights at the BASE of existing trees/shrubs and soft path lights — ground/plant lighting only. Do NOT add warm soffit cans, wall washes, or any second roofline system. Do not redesign plants.'
+        : 'OPTIONAL ONLY: add subtle warm-white uplights at the BASE of existing trees/shrubs and soft path lights — do not redesign or replace any plants.'
     );
   } else if (serviceType !== 'christmas') {
     lines.push(isNeon
@@ -400,7 +392,7 @@ export function buildRenderPrompt({ scheme, customColors, landscape, decor, deco
   }
   if (decor === 'christmas' || serviceType === 'christmas') {
     const decorText = decorColor === 'multicolor' ? 'multicolor' : 'warm white';
-    lines.push(`Add Christmas decor on existing features only: lit wreath on the front door, light garland on entry columns or railings with ${decorText} lights, and wrap ONLY existing bushes/shrubs sitting exactly in front of the house (foundation plantings under the front windows) with ${decorText} string lights. Do NOT wrap or light any trees. Do not add new plants, inflatables, or structures.`);
+    lines.push(`Add Christmas decor on existing features only: lit wreath on the front door, light garland on entry columns or railings with ${decorText} lights, and wrap existing shrubs or small trees near the house with ${decorText} string lights. Do not add new plants, inflatables, or structures.`);
   }
   lines.push('Photorealistic output only. Same house, same garden — lights and decor on the single target house only.');
   return lines.join(' ');
@@ -438,9 +430,9 @@ export function buildShortPrompt({ scheme, customColors, landscape, decor, decor
       ? 'blue-hour dusk deep blue sky, preserve original clouds or clear sky exactly, 5000K crisp white exterior lighting, clean white wall wash, no amber or yellow tint, photorealistic'
       : 'blue-hour dusk deep blue sky, preserve original clouds or clear sky exactly no invented clouds, warm LEDs eye-catching, soft dusk not pitch black, subtle existing windows, photorealistic',
   ];
-  if (landscape) bits.push('string/net lights ONLY on existing bushes exactly in front of the house, NO lights on any trees, path stake lights ok, no new plants');
+  if (landscape) bits.push('subtle uplights only on existing trees, no new plants');
   if (decor === 'christmas' || serviceType === 'christmas') {
-    bits.push('wreath, garland, wrap only front-of-house bushes not trees with ' + (decorColor === 'multicolor' ? 'multicolor' : 'warm white') + ' lights');
+    bits.push('wreath, garland, and shrub wraps with ' + (decorColor === 'multicolor' ? 'multicolor' : 'warm white') + ' lights at entry only');
   }
   if (serviceType === 'holiday') bits.push('light garland at entry only, no new structures');
   return bits.join(', ');
