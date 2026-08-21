@@ -26,7 +26,7 @@
     'Soft warm white lights along every eave and peak',
     'Red and green Christmas roofline with a wreath on the door',
     'Team colors — red and blue alternating on the roofline',
-    'Cool white modern look plus soft landscape uplights on the trees',
+    'Cool white modern look plus lights on the front bushes only, no tree lights',
   ];
 
   function el(html) {
