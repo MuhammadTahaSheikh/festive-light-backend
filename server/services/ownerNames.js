@@ -1,5 +1,5 @@
-/** First name for “Hey {{owner_first}}” — falls back to full name / neighbor. */
-export function ownerFirstName(fullName = '', fallback = 'neighbor') {
+/** First name for postcard greetings. Empty when no owner is on file — never “neighbor”. */
+export function ownerFirstName(fullName = '', fallback = '') {
   const cleaned = String(fullName || '')
     .replace(/\s+/g, ' ')
     .replace(/,?\s*(jr\.?|sr\.?|ii|iii|iv)\s*$/i, '')

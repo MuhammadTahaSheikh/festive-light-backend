@@ -23,7 +23,7 @@ describe('assessorsearch owner parse', () => {
 
   test('ownerFirstName', () => {
     assert.equal(ownerFirstName('Jane Q Public'), 'Jane');
-    assert.equal(ownerFirstName(''), 'neighbor');
+    assert.equal(ownerFirstName(''), '');
   });
 
   test('mergeTemplateText owner tags', () => {
@@ -32,7 +32,7 @@ describe('assessorsearch owner parse', () => {
         ownerName: 'Jane Public',
         ownerFirst: 'Jane',
       }),
-      'Hey Jane, from Jane Public',
+      'Hello Jane, from Jane Public',
     );
   });
 });

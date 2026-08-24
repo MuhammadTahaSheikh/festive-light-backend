@@ -46,7 +46,7 @@ describe('batchdata owner parse', () => {
 
   test('ownerFirstName', () => {
     assert.equal(ownerFirstName('Jane Q Public'), 'Jane');
-    assert.equal(ownerFirstName(''), 'neighbor');
+    assert.equal(ownerFirstName(''), '');
     assert.equal(ownerFirstName('ABC Holdings LLC'), 'ABC Holdings LLC');
   });
 });

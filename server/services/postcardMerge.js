@@ -180,15 +180,25 @@ export function buildQuoteUrl(renderId, baseUrl) {
   return `${base}/app/quote/${renderId}`;
 }
 
+function professionalGreeting(ownerFirst) {
+  const name = String(ownerFirst || '').trim();
+  if (/^neighbor$/i.test(name)) return 'Hello';
+  return name ? `Hello ${name}` : 'Hello';
+}
+
 export function mergeTemplateText(text, ctx) {
   const owner = ctx.ownerName || ctx.owner || '';
-  const ownerFirst = ctx.ownerFirst || owner || 'neighbor';
+  const rawFirst = String(ctx.ownerFirst || owner || '').trim();
+  const ownerFirst = /^neighbor$/i.test(rawFirst) ? '' : rawFirst;
+  const greeting = professionalGreeting(ownerFirst);
   return String(text || '')
     .replace(/\{\{price\}\}/g, ctx.priceFormatted || '')
     .replace(/\{\{feet\}\}/g, ctx.rooflineFeet != null ? String(ctx.rooflineFeet) : '')
     .replace(/\{\{address\}\}/g, ctx.address || '')
     .replace(/\{\{owner\}\}/g, owner || 'Homeowner')
+    .replace(/\b(Hey|Hi|Hello)\s+\{\{owner_first\}\}/gi, greeting)
     .replace(/\{\{owner_first\}\}/g, ownerFirst)
+    .replace(/\{\{greeting\}\}/g, greeting)
     .replace(/\{\{name\}\}/g, owner || 'Homeowner');
 }
 

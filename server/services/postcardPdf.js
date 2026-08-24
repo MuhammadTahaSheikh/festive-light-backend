@@ -334,7 +334,7 @@ export async function buildPostcardForHome(template, home, render, options = {})
     address: home.address,
     ownerName,
     owner: ownerName,
-    ownerFirst: ownerFirstName(ownerName, 'neighbor'),
+    ownerFirst: ownerFirstName(ownerName),
     priceFormatted: options.priceFormatted || formatPrice(pricing.frontPrice || home.estimated_total || render?.estimated_total),
     rooflineFeet: pricing.frontFeet,
     quoteUrl: options.quoteUrl || (render?.id ? `${base}/app/quote/${render.id}` : ''),

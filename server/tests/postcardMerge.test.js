@@ -26,7 +26,15 @@ describe('postcardMerge', () => {
         ownerFirst: 'Alex',
         address: '123 Main St',
       }),
-      'Hey Alex — 123 Main St',
+      'Hello Alex — 123 Main St',
+    );
+    assert.equal(
+      mergeTemplateText('Hello {{owner_first}},\nWe designed a custom lighting look', {}),
+      'Hello,\nWe designed a custom lighting look',
+    );
+    assert.equal(
+      mergeTemplateText('Hey {{owner_first}} — your quote is ready', { ownerFirst: 'neighbor' }),
+      'Hello — your quote is ready',
     );
   });
 

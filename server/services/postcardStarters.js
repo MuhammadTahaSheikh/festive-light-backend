@@ -24,7 +24,7 @@ export const STARTER_TEMPLATES = [
       background: '#141416',
       elements: [
         { id: 'b1', type: 'text', x: 0.5, y: 0.4, w: 8, h: 0.6, text: 'Festive Lighting Pros', fontSize: 22, color: '#f49321', align: 'center', bold: true },
-        { id: 'b2', type: 'text', x: 0.5, y: 1.05, w: 8, h: 1.55, text: 'Hey {{owner_first}} —\nWe designed a custom lighting look\nspecifically for your home.\nYour personalized quote is ready,\nwith pricing and next steps inside.', fontSize: 13, color: '#f3f1ec', align: 'center' },
+        { id: 'b2', type: 'text', x: 0.5, y: 1.05, w: 8, h: 1.55, text: 'Hello {{owner_first}},\nWe designed a custom lighting look\nspecifically for your home.\nYour personalized quote is ready,\nwith pricing and next steps inside.', fontSize: 13, color: '#f3f1ec', align: 'center' },
         { id: 'b3', type: 'text', x: 0.5, y: 2.75, w: 4, h: 0.5, text: 'Estimated front quote:', fontSize: 11, color: '#9a948a', align: 'left' },
         { id: 'b4', type: 'price', x: 0.5, y: 3.25, w: 4, h: 0.8, fontSize: 28, color: '#f49321', align: 'left', bold: true },
         { id: 'b5', type: 'qr', x: 6.2, y: 2.4, w: 2.2, h: 2.2 },
@@ -43,7 +43,7 @@ export const STARTER_TEMPLATES = [
       background: '#0b0b0d',
       elements: [
         { id: 'r1', type: 'render', x: 0, y: 0.9, w: 9, h: 5.1 },
-        { id: 't1', type: 'text', x: 0.4, y: 0.25, w: 8.2, h: 0.7, text: 'Hey {{owner_first}}, this is YOUR house.', fontSize: 24, color: '#ffffff', align: 'center', bold: true },
+        { id: 't1', type: 'text', x: 0.4, y: 0.25, w: 8.2, h: 0.7, text: 'Hello {{owner_first}}, this is YOUR house.', fontSize: 24, color: '#ffffff', align: 'center', bold: true },
         { id: 't2', type: 'text', x: 0.4, y: 5.35, w: 8.2, h: 0.45, text: 'A real render of your home — not a stock photo.', fontSize: 10, color: '#9a948a', align: 'center' },
       ],
     },
