@@ -19,6 +19,7 @@ test('buildBookConsultationPayload matches the GHL field set', () => {
     pricePerFoot: 10,
     imageUrl: 'http://example.com/renders/home.jpg',
     image: 'data:image/jpeg;base64,abc',
+    quoteId: '698f519b-7de9-44f8-9b80-7f7ed224437b',
   });
 
   assert.equal(payload.event, 'book_consultation');
@@ -33,12 +34,13 @@ test('buildBookConsultationPayload matches the GHL field set', () => {
   assert.equal(payload.pricePerFoot, 10);
   assert.equal(payload.imageUrl, 'http://example.com/renders/home.jpg');
   assert.equal(payload.image, 'data:image/jpeg;base64,abc');
+  assert.equal(payload.quoteUrl, 'https://festive-light-frontend.vercel.app/app/quote/698f519b-7de9-44f8-9b80-7f7ed224437b');
   assert.match(payload.htmlEmail, /^<!DOCTYPE html>/);
   assert.match(payload.htmlEmail, /217 Bloomfield St/);
   assert.match(payload.htmlEmail, /180 ft/);
 });
 
-test('buildConsultationHtmlEmail includes the render image URL', () => {
+test('buildConsultationHtmlEmail links to the public /app/quote page', () => {
   const html = buildConsultationHtmlEmail({
     name: 'Taha',
     address: '1 Main St',
@@ -46,10 +48,13 @@ test('buildConsultationHtmlEmail includes the render image URL', () => {
     footage: 110,
     estimate: 2200,
     pricePerFoot: 20,
+    quoteId: '698f519b-7de9-44f8-9b80-7f7ed224437b',
   });
   assert.match(html, /Hi Taha/);
   assert.match(html, /\/renders\/abc\.jpg/);
   assert.match(html, /110 ft/);
+  assert.match(html, /https:\/\/festive-light-frontend\.vercel\.app\/app\/quote\/698f519b-7de9-44f8-9b80-7f7ed224437b/);
+  assert.match(html, /clicktracking="off"/);
 });
 
 test('sendBookConsultationWebhook POSTs JSON to the configured hook', async () => {

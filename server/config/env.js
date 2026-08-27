@@ -27,6 +27,9 @@ export const LOB_API_KEY = process.env.LOB_API_KEY || '';
 export const LOB_MAIL_MODE = (process.env.LOB_MAIL_MODE || 'demo').toLowerCase();
 export const LOB_MAIL_ALLOW_WARNINGS = String(process.env.LOB_MAIL_ALLOW_WARNINGS || 'false').toLowerCase() === 'true';
 export const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || '';
+/** Customer quote page (email CTA). Defaults to the Vercel dashboard host. */
+export const QUOTE_PAGE_BASE_URL = (process.env.QUOTE_PAGE_BASE_URL || '').replace(/\/$/, '')
+  || 'https://festive-light-frontend.vercel.app';
 
 /** Comma-separated browser origins allowed to call the API (Vercel, local Vite). */
 export const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '')

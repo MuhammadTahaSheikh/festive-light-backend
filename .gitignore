@@ -10,8 +10,6 @@ npm-debug.log*
 
 # Local clones used by scripts/sync-push-github.js
 .github-mirrors/
-# Leftover unused local clones (do not commit)
-.gitlab-mirrors/
 
 # Build output
 client/dist/

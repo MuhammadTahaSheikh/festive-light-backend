@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
-import { LEADCONNECTOR_WEBHOOK_URL, PUBLIC_BASE_URL, PORT } from '../config/env.js';
+import { LEADCONNECTOR_WEBHOOK_URL, PUBLIC_BASE_URL, QUOTE_PAGE_BASE_URL, PORT } from '../config/env.js';
 import { RENDERS_DIR } from '../config/paths.js';
 import { buildQuoteUrl, formatPrice } from './postcardMerge.js';
 
@@ -16,6 +16,18 @@ function publicBase() {
   const base = (PUBLIC_BASE_URL || '').replace(/\/$/, '');
   if (base) return base;
   return `http://localhost:${PORT || 3000}`;
+}
+
+/** Quote page lives on the Vercel app at /app/quote/:id — never localhost. */
+function quotePageBase() {
+  const raw = (QUOTE_PAGE_BASE_URL || PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  if (raw && !/localhost|127\.0\.0\.1/i.test(raw)) return raw;
+  return 'https://festive-light-frontend.vercel.app';
+}
+
+export function customerQuoteUrl(quoteId) {
+  if (!quoteId) return '';
+  return buildQuoteUrl(quoteId, quotePageBase());
 }
 
 export function absolutizeUrl(imageUrl) {
@@ -83,7 +95,7 @@ export function buildConsultationHtmlEmail({
   const safeName = escapeHtml(name);
   const safeAddress = escapeHtml(address);
   const absImage = absolutizeUrl(imageUrl);
-  const quoteUrl = quoteId ? buildQuoteUrl(quoteId, publicBase()) : '';
+  const quoteUrl = customerQuoteUrl(quoteId);
   const greeting = safeName ? `Hi ${safeName},` : 'Hi,';
   const extraLine = extraFootage > 0
     ? `<li>Extra footage: <strong>${Math.round(extraFootage)} ft</strong>${extraPrice ? ` · ${escapeHtml(formatPrice(extraPrice))}` : ''}</li>`
@@ -112,10 +124,13 @@ export function buildConsultationHtmlEmail({
     ${quoteUrl
       ? `<p style="margin:24px 0;">
            <a href="${escapeHtml(quoteUrl)}"
+              clicktracking="off"
+              data-msys-clicktrack="0"
               style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;padding:12px 22px;border-radius:6px;font-size:15px;">
              View your full quote
            </a>
-         </p>`
+         </p>
+         <p style="font-size:13px;color:#888;word-break:break-all;">Open your quote: ${escapeHtml(quoteUrl)}</p>`
       : ''}
     <p style="margin:28px 0 0;font-size:13px;color:#888;line-height:1.5;">
       Questions? Call (941) 239-7919.
@@ -134,6 +149,7 @@ export function buildBookConsultationPayload(input = {}) {
     ? Math.round(extraFootage * pricePerFoot)
     : Math.round(toNum(input.extraPrice));
   const imageUrl = absolutizeUrl(input.imageUrl);
+  const quoteUrl = customerQuoteUrl(input.quoteId);
   const htmlEmail = input.htmlEmail
     || buildConsultationHtmlEmail({
       ...input,
@@ -158,6 +174,7 @@ export function buildBookConsultationPayload(input = {}) {
     pricePerFoot,
     imageUrl,
     image: String(input.image || ''),
+    quoteUrl,
     htmlEmail,
   };
 }
