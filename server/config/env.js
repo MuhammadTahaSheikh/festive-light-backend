@@ -68,3 +68,13 @@ export const EMAIL_REPLY_TO = process.env.EMAIL_REPLY_TO || '';
 
 /** Microsoft Teams channel alerts (Power Automate / Incoming Webhook) — optional. */
 export const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || '';
+
+/**
+ * Go High Level / LeadConnector inbound webhook for "Book my free consultation".
+ * Unset = use the production hook. Set to empty / "off" to disable.
+ */
+const GHL_DEFAULT_WEBHOOK = 'https://services.leadconnectorhq.com/hooks/jzVDKmbLQ9pEJYFGAe9I/webhook-trigger/833773ae-97be-474b-942d-8ba4ee22732b';
+const ghlRaw = process.env.LEADCONNECTOR_WEBHOOK_URL;
+export const LEADCONNECTOR_WEBHOOK_URL = ghlRaw === undefined
+  ? GHL_DEFAULT_WEBHOOK
+  : (/^(off|disabled)$/i.test(String(ghlRaw).trim()) ? '' : String(ghlRaw).trim());

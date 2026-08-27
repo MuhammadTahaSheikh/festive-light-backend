@@ -44,6 +44,8 @@
   }
 
   function build(root) {
+    var lastResult = null;
+    var booked = false;
     var state = {
       placeId: '', address: '', lat: null, lng: null, imageBase64: '', mapsEnabled: false,
       scheme: 'warm-white',
@@ -151,6 +153,7 @@
           '<img class="rimg" data-f="img" alt="Your home with permanent lighting">' +
           '<div class="stats" data-f="stats"></div>' +
           '<button class="btn" data-f="book">Book my free consultation →</button>' +
+          '<div class="err" data-f="bookerr" style="display:none;margin-top:10px;"></div>' +
           '<button class="btn ghost" data-f="again">Try another look</button>' +
           '<p class="note" data-f="resultnote"></p>' +
         '</div>' +
@@ -471,10 +474,36 @@
       return cards.join('');
     }
 
+    function quoteSnapshot(d) {
+      var s = (d && d.stats) || {};
+      var rate = s.pricePerFoot || parseFloat(qf('rate').value) || 0;
+      return {
+        footage: Math.round(s.frontFeet || s.rooflineFeet || 0),
+        estimate: s.frontPrice || s.estimatedTotal || 0,
+        extraFootage: 0,
+        extraPrice: 0,
+        pricePerFoot: rate,
+        imageUrl: (d && d.imageUrl) || '',
+        quoteId: (d && d.quoteId) || undefined,
+        address: (d && d.address) || (qf('address').value || '').trim(),
+      };
+    }
+
+    function resetBookButton() {
+      booked = false;
+      qf('bookerr').style.display = 'none';
+      qf('bookerr').textContent = '';
+      qf('book').disabled = false;
+      qf('book').textContent = 'Book my free consultation →';
+    }
+
     function renderResult(d) {
+      lastResult = d;
+      try { window.__flpLastQuote = quoteSnapshot(d); } catch (e) {}
       qf('img').src = d.imageUrl;
       var s = d.stats || {};
       qf('stats').innerHTML = statsCards(s);
+      resetBookButton();
       if (d.preview) {
         qf('book').style.display = 'none';
         var verified = d.streetView && d.streetView.verifiedAddress;
@@ -492,11 +521,53 @@
     }
 
     qf('book').addEventListener('click', function () {
-      var btn = document.querySelector('[data-flp-book]');
-      if (btn) btn.click();
+      if (booked || qf('book').disabled) return;
+      var name = (qf('name').value || '').trim();
+      var email = (qf('email').value || '').trim();
+      var phone = (qf('phone').value || '').trim();
+      if (!email && !phone) {
+        qf('bookerr').textContent = 'Enter your email or phone on the previous step so we can reach you.';
+        qf('bookerr').style.display = '';
+        return;
+      }
+      qf('bookerr').style.display = 'none';
+      qf('book').disabled = true;
+      qf('book').textContent = 'Sending…';
+      var snap = quoteSnapshot(lastResult);
+      fetch('/api/lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'book_consultation',
+          name: name,
+          email: email,
+          phone: phone,
+          address: snap.address,
+          source: 'book_consultation',
+          footage: snap.footage,
+          estimate: snap.estimate,
+          extraFootage: snap.extraFootage,
+          extraPrice: snap.extraPrice,
+          pricePerFoot: snap.pricePerFoot,
+          imageUrl: snap.imageUrl,
+          quoteId: snap.quoteId,
+        }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error((res.d && res.d.error) || 'Request failed');
+          booked = true;
+          qf('book').textContent = 'We\'ll be in touch →';
+        })
+        .catch(function () {
+          qf('book').disabled = false;
+          qf('book').textContent = 'Book my free consultation →';
+          qf('bookerr').textContent = 'Couldn\'t send that. Please call us at (941) 239-7919.';
+          qf('bookerr').style.display = '';
+        });
     });
-    qf('again').addEventListener('click', function () { show('form'); });
-    qf('retry').addEventListener('click', function () { show('form'); });
+    qf('again').addEventListener('click', function () { resetBookButton(); show('form'); });
+    qf('retry').addEventListener('click', function () { resetBookButton(); show('form'); });
   }
 
   window.FLPDemoWidget = {

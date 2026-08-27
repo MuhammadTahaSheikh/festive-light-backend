@@ -810,9 +810,25 @@
         submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
         try {
           const fd = new FormData(form);
+          const quote = window.__flpLastQuote || {};
           const resp = await fetch('/api/lead', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: fd.get('name'), phone: fd.get('phone'), email: fd.get('email'), address: fd.get('address'), notes: fd.get('notes'), source: 'book_call' }),
+            body: JSON.stringify({
+              event: 'book_consultation',
+              name: fd.get('name'),
+              phone: fd.get('phone'),
+              email: fd.get('email'),
+              address: fd.get('address') || quote.address || '',
+              notes: fd.get('notes'),
+              source: 'book_call',
+              footage: quote.footage || 0,
+              estimate: quote.estimate || 0,
+              extraFootage: quote.extraFootage || 0,
+              extraPrice: quote.extraPrice || 0,
+              pricePerFoot: quote.pricePerFoot || 0,
+              imageUrl: quote.imageUrl || '',
+              quoteId: quote.quoteId || undefined,
+            }),
           });
           if (!resp.ok) throw new Error('Request failed');
           okBox.textContent = '✓ Got it! We\'ll reach out shortly to schedule your free consultation.';
@@ -826,7 +842,7 @@
     })();
   </script>
 
-  <script src="/demo-widget.js?v=11" defer></script>
+  <script src="/demo-widget.js?v=12" defer></script>
   <script>window.addEventListener('load', function () { if (window.FLPDemoWidget) { try { FLPDemoWidget.mount('#flp-demo-widget'); } catch (e) {} } });</script>
 </body>
 </html>

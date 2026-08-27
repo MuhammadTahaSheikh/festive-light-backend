@@ -12,7 +12,7 @@
     "client:build": "npm run build --prefix client",
     "build": "npm run client:build",
     "postinstall": "npm install --prefix client",
-    "test": "node --test --import ./server/tests/setup.js server/tests/creditPackages.test.js server/tests/credits.test.js server/tests/creditsRoutes.test.js server/tests/postcardMerge.test.js server/tests/addressVerify.test.js server/tests/blockWave.test.js server/tests/pricing.test.js",
+    "test": "node --test --import ./server/tests/setup.js server/tests/creditPackages.test.js server/tests/credits.test.js server/tests/creditsRoutes.test.js server/tests/postcardMerge.test.js server/tests/addressVerify.test.js server/tests/blockWave.test.js server/tests/pricing.test.js server/tests/leadconnector.test.js",
     "setup:credits": "node scripts/setup-credits.js",
     "setup:outreach": "node scripts/setup-outreach-columns.js",
     "setup:created-by": "node scripts/setup-created-by.js",
