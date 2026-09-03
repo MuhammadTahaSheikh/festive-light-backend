@@ -161,10 +161,38 @@ export async function fetchStreetViewImage(target, options = {}) {
   };
 }
 
-export async function geocodeAddress(address) {
+/** Photon (OpenStreetMap) geocode — free fallback when Google Geocoding fails. */
+async function osmGeocodeAddress(address) {
+  const url = new URL('https://photon.komoot.io/api/');
+  url.searchParams.set('q', address);
+  url.searchParams.set('limit', '1');
+  url.searchParams.set('lang', 'en');
+  const resp = await fetch(url, { headers: { 'User-Agent': 'FestiveLightingPros/1.0' } });
+  const data = await resp.json();
+  const f = data.features?.[0];
+  const coords = f?.geometry?.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2) return null;
+  const [lng, lat] = coords;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const p = f.properties || {};
+  const line1 = [p.housenumber, p.street || p.name].filter(Boolean).join(' ') || p.name || '';
+  const line2 = [p.city || p.town || p.village, p.state, p.postcode, p.country]
+    .filter(Boolean)
+    .join(', ');
+  return {
+    lat,
+    lng,
+    formattedAddress: [line1, line2].filter(Boolean).join(', ') || address,
+  };
+}
+
+async function googleGeocodeAddress(address) {
   const g = await fetch(
     `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GOOGLE_MAPS_API_KEY}`,
   ).then((r) => r.json());
+  if (g.status && g.status !== 'OK' && g.status !== 'ZERO_RESULTS') {
+    throw new Error(`${g.status}${g.error_message ? `: ${g.error_message}` : ''}`);
+  }
   const first = g.results?.[0];
   if (!first?.geometry?.location) return null;
   return {
@@ -172,6 +200,18 @@ export async function geocodeAddress(address) {
     lng: first.geometry.location.lng,
     formattedAddress: first.formatted_address || address,
   };
+}
+
+export async function geocodeAddress(address) {
+  if (GOOGLE_MAPS_API_KEY) {
+    try {
+      const hit = await googleGeocodeAddress(address);
+      if (hit) return hit;
+    } catch (err) {
+      console.warn('[maps] Google geocode failed, falling back to OSM:', err.message);
+    }
+  }
+  return osmGeocodeAddress(address);
 }
 
 /** Google Places API (New) autocomplete — requires GOOGLE_MAPS_API_KEY. */
