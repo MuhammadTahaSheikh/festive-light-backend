@@ -7,7 +7,6 @@ import {
   bulkAddCampaignHomes,
   updateCampaign,
   listCampaignHomes,
-  findCachedOwnerName,
   updateCampaignHome,
 } from '../db/index.js';
 import { campaignStats } from '../services/pricing.js';
@@ -108,42 +107,15 @@ router.post('/:id/homes/enrich-owners', async (req, res) => {
       });
     }
 
-    const cachedRows = [];
-    const pending = [];
-    for (const home of homes) {
-      const cached = await findCachedOwnerName(home.address, { excludeId: home.id });
-      if (cached) {
-        cachedRows.push({
-          homeId: home.id,
-          address: home.address,
-          matched: true,
-          owner_name: cached,
-          source: 'cache',
-        });
-      } else {
-        pending.push(home);
-      }
-    }
+    const lookups = await lookupOwnersByAddress(homes);
 
-    const lookups = pending.length ? await lookupOwnersByAddress(pending) : [];
-    const fatal = lookups.find((row) => row.fatal);
-    if (fatal && !cachedRows.length && !lookups.some((row) => row.matched)) {
-      const status = fatal.code === 'attom_unauthorized' ? 503 : 502;
-      return res.status(status).json({
-        error: fatal.code || 'enrich_failed',
-        detail: fatal.rawError || 'Owner lookup provider rejected the request.',
-        ...ownerLookupStatus(),
-      });
-    }
-
-    const combined = [...cachedRows, ...lookups];
     const results = [];
     let matched = 0;
     let updated = 0;
 
-    for (const row of combined) {
+    for (const row of lookups) {
       if (row.matched) matched++;
-      if (row.homeId && row.matched && row.owner_name) {
+      if (row.homeId && row.matched) {
         const saved = await updateCampaignHome(row.homeId, { owner_name: row.owner_name });
         if (saved) updated++;
       }
@@ -152,8 +124,6 @@ router.post('/:id/homes/enrich-owners', async (req, res) => {
         address: row.address,
         matched: row.matched,
         owner_name: row.owner_name,
-        source: row.source || 'attom',
-        reason: row.matched ? undefined : (row.rawError || undefined),
       });
     }
 
@@ -163,12 +133,11 @@ router.post('/:id/homes/enrich-owners', async (req, res) => {
       updated,
       total: homes.length,
       skipped: homes.length - matched,
-      warning: fatal ? fatal.rawError : undefined,
       ...ownerLookupStatus(),
       results,
     });
   } catch (err) {
-    const status = err.code === 'owner_lookup_not_configured' || err.code === 'attom_not_configured' || err.code === 'assessorsearch_not_configured' || err.code === 'attom_unauthorized' ? 503 : 500;
+    const status = err.code === 'owner_lookup_not_configured' || err.code === 'attom_not_configured' || err.code === 'assessorsearch_not_configured' ? 503 : 500;
     res.status(status).json({
       error: err.code || 'enrich_failed',
       detail: String(err.message || err),

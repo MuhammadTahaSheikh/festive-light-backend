@@ -11,7 +11,6 @@ export {
   updateCampaign,
   listCampaignHomes,
   findCampaignHomeByRenderId,
-  findCachedOwnerName,
   updateCampaignHome,
 } from './campaigns.js';
 export {

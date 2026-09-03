@@ -186,27 +186,11 @@ function professionalGreeting(ownerFirst) {
   return name ? `Hello ${name}` : 'Hello';
 }
 
-function greetingPrefix(ownerFirst) {
-  const name = String(ownerFirst || '').trim();
-  if (/^neighbor$/i.test(name) || !name) return '';
-  return `Hello ${name} — `;
-}
-
-function ownerEyebrow(ownerFirst, ownerFull) {
-  const first = String(ownerFirst || '').trim();
-  if (first && !/^neighbor$/i.test(first)) return `PREPARED FOR ${first.toUpperCase()}`;
-  const full = String(ownerFull || '').trim();
-  if (full) return `PREPARED FOR ${full.toUpperCase()}`;
-  return 'PERSONALIZED FOR YOUR HOME';
-}
-
 export function mergeTemplateText(text, ctx) {
   const owner = ctx.ownerName || ctx.owner || '';
   const rawFirst = String(ctx.ownerFirst || owner || '').trim();
   const ownerFirst = /^neighbor$/i.test(rawFirst) ? '' : rawFirst;
   const greeting = professionalGreeting(ownerFirst);
-  const greetingPrefixText = greetingPrefix(ownerFirst);
-  const ownerEyebrowText = ownerEyebrow(ownerFirst, owner);
   return String(text || '')
     .replace(/\{\{price\}\}/g, ctx.priceFormatted || '')
     .replace(/\{\{feet\}\}/g, ctx.rooflineFeet != null ? String(ctx.rooflineFeet) : '')
@@ -214,8 +198,6 @@ export function mergeTemplateText(text, ctx) {
     .replace(/\{\{owner\}\}/g, owner || 'Homeowner')
     .replace(/\b(Hey|Hi|Hello)\s+\{\{owner_first\}\}/gi, greeting)
     .replace(/\{\{owner_first\}\}/g, ownerFirst)
-    .replace(/\{\{owner_eyebrow\}\}/g, ownerEyebrowText)
-    .replace(/\{\{greeting_prefix\}\}/g, greetingPrefixText)
     .replace(/\{\{greeting\}\}/g, greeting)
     .replace(/\{\{name\}\}/g, owner || 'Homeowner');
 }

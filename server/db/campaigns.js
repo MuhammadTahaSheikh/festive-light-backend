@@ -83,34 +83,6 @@ export async function listCampaignHomes(campaignId) {
   return readJson(HOMES_FILE).filter((h) => h.campaign_id === campaignId);
 }
 
-/** Address strings that should match the same house (with/without country suffix). */
-export function addressLookupVariants(address = '') {
-  const raw = String(address || '').trim();
-  if (!raw) return [];
-  const noCountry = raw.replace(/,?\s*(USA|United States|U\.S\.A\.?)\s*$/i, '').trim();
-  return [...new Set([raw, noCountry, noCountry ? `${noCountry}, USA` : ''])].filter(Boolean);
-}
-
-/** Reuse an owner name already stored for this address on any campaign. */
-export async function findCachedOwnerName(address, { excludeId } = {}) {
-  const variants = addressLookupVariants(address);
-  if (!variants.length) return null;
-  let rows = [];
-  if (supa) {
-    const { data, error } = await supa
-      .from('campaign_homes')
-      .select('id, owner_name, address')
-      .in('address', variants)
-      .limit(50);
-    if (error) throw new Error(error.message);
-    rows = data || [];
-  } else {
-    rows = readJson(HOMES_FILE).filter((h) => variants.includes(h.address));
-  }
-  const hit = rows.find((h) => h.id !== excludeId && String(h.owner_name || '').trim());
-  return hit ? String(hit.owner_name).trim() : null;
-}
-
 /** Find a campaign home linked to a quote/render (for Quotes page mail preview). Prefers a row with owner_name. */
 export async function findCampaignHomeByRenderId(renderId) {
   if (!renderId) return null;

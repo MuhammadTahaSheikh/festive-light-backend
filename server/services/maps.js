@@ -161,52 +161,10 @@ export async function fetchStreetViewImage(target, options = {}) {
   };
 }
 
-/** Nominatim (OpenStreetMap) house-level geocode — more accurate than Photon for US street numbers. */
-async function osmGeocodeAddress(address) {
-  const url = new URL('https://nominatim.openstreetmap.org/search');
-  url.searchParams.set('q', address);
-  url.searchParams.set('format', 'jsonv2');
-  url.searchParams.set('addressdetails', '1');
-  url.searchParams.set('limit', '5');
-  url.searchParams.set('countrycodes', 'us');
-  const resp = await fetch(url, {
-    headers: { 'User-Agent': 'FestiveLightingPros/1.0 (outreach map geocode)' },
-  });
-  if (!resp.ok) throw new Error(`nominatim_${resp.status}`);
-  const rows = await resp.json();
-  if (!Array.isArray(rows) || !rows.length) return null;
-
-  const want = String(address || '').trim().match(/^(\d+[A-Za-z]?)\b/);
-  const wantNum = want ? want[1].toUpperCase() : '';
-  const ranked = [...rows].sort((a, b) => {
-    const aHouse = String(a.address?.house_number || '').toUpperCase();
-    const bHouse = String(b.address?.house_number || '').toUpperCase();
-    const aExact = wantNum && aHouse === wantNum ? 1 : 0;
-    const bExact = wantNum && bHouse === wantNum ? 1 : 0;
-    if (aExact !== bExact) return bExact - aExact;
-    const aHouseType = a.type === 'house' || a.addresstype === 'house' ? 1 : 0;
-    const bHouseType = b.type === 'house' || b.addresstype === 'house' ? 1 : 0;
-    return bHouseType - aHouseType;
-  });
-
-  const hit = ranked[0];
-  const lat = Number(hit.lat);
-  const lng = Number(hit.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return {
-    lat,
-    lng,
-    formattedAddress: hit.display_name || address,
-  };
-}
-
-async function googleGeocodeAddress(address) {
+export async function geocodeAddress(address) {
   const g = await fetch(
     `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GOOGLE_MAPS_API_KEY}`,
   ).then((r) => r.json());
-  if (g.status && g.status !== 'OK' && g.status !== 'ZERO_RESULTS') {
-    throw new Error(`${g.status}${g.error_message ? `: ${g.error_message}` : ''}`);
-  }
   const first = g.results?.[0];
   if (!first?.geometry?.location) return null;
   return {
@@ -214,18 +172,6 @@ async function googleGeocodeAddress(address) {
     lng: first.geometry.location.lng,
     formattedAddress: first.formatted_address || address,
   };
-}
-
-export async function geocodeAddress(address) {
-  if (GOOGLE_MAPS_API_KEY) {
-    try {
-      const hit = await googleGeocodeAddress(address);
-      if (hit) return hit;
-    } catch (err) {
-      console.warn('[maps] Google geocode failed, falling back to OSM:', err.message);
-    }
-  }
-  return osmGeocodeAddress(address);
 }
 
 /** Google Places API (New) autocomplete — requires GOOGLE_MAPS_API_KEY. */
