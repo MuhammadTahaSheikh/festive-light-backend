@@ -161,28 +161,42 @@ export async function fetchStreetViewImage(target, options = {}) {
   };
 }
 
-/** Photon (OpenStreetMap) geocode — free fallback when Google Geocoding fails. */
+/** Nominatim (OpenStreetMap) house-level geocode — more accurate than Photon for US street numbers. */
 async function osmGeocodeAddress(address) {
-  const url = new URL('https://photon.komoot.io/api/');
+  const url = new URL('https://nominatim.openstreetmap.org/search');
   url.searchParams.set('q', address);
-  url.searchParams.set('limit', '1');
-  url.searchParams.set('lang', 'en');
-  const resp = await fetch(url, { headers: { 'User-Agent': 'FestiveLightingPros/1.0' } });
-  const data = await resp.json();
-  const f = data.features?.[0];
-  const coords = f?.geometry?.coordinates;
-  if (!Array.isArray(coords) || coords.length < 2) return null;
-  const [lng, lat] = coords;
+  url.searchParams.set('format', 'jsonv2');
+  url.searchParams.set('addressdetails', '1');
+  url.searchParams.set('limit', '5');
+  url.searchParams.set('countrycodes', 'us');
+  const resp = await fetch(url, {
+    headers: { 'User-Agent': 'FestiveLightingPros/1.0 (outreach map geocode)' },
+  });
+  if (!resp.ok) throw new Error(`nominatim_${resp.status}`);
+  const rows = await resp.json();
+  if (!Array.isArray(rows) || !rows.length) return null;
+
+  const want = String(address || '').trim().match(/^(\d+[A-Za-z]?)\b/);
+  const wantNum = want ? want[1].toUpperCase() : '';
+  const ranked = [...rows].sort((a, b) => {
+    const aHouse = String(a.address?.house_number || '').toUpperCase();
+    const bHouse = String(b.address?.house_number || '').toUpperCase();
+    const aExact = wantNum && aHouse === wantNum ? 1 : 0;
+    const bExact = wantNum && bHouse === wantNum ? 1 : 0;
+    if (aExact !== bExact) return bExact - aExact;
+    const aHouseType = a.type === 'house' || a.addresstype === 'house' ? 1 : 0;
+    const bHouseType = b.type === 'house' || b.addresstype === 'house' ? 1 : 0;
+    return bHouseType - aHouseType;
+  });
+
+  const hit = ranked[0];
+  const lat = Number(hit.lat);
+  const lng = Number(hit.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  const p = f.properties || {};
-  const line1 = [p.housenumber, p.street || p.name].filter(Boolean).join(' ') || p.name || '';
-  const line2 = [p.city || p.town || p.village, p.state, p.postcode, p.country]
-    .filter(Boolean)
-    .join(', ');
   return {
     lat,
     lng,
-    formattedAddress: [line1, line2].filter(Boolean).join(', ') || address,
+    formattedAddress: hit.display_name || address,
   };
 }
 

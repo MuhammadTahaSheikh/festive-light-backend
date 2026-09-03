@@ -23,19 +23,27 @@ router.post('/neighbors', async (req, res) => {
   const { lat, lng, address = '', count = 250 } = req.body || {};
   let resolvedLat = lat;
   let resolvedLng = lng;
+  let formattedAddress = '';
   try {
     if ((resolvedLat == null || resolvedLng == null) && address.trim()) {
       const geo = await geocodeAddress(address.trim());
       if (!geo) return res.status(404).json({ error: 'address_not_found' });
       resolvedLat = geo.lat;
       resolvedLng = geo.lng;
+      formattedAddress = geo.formattedAddress || '';
     }
     if (resolvedLat == null || resolvedLng == null) {
       return res.status(400).json({ error: 'missing_location' });
     }
     const cap = Math.min(Math.max(1, Number(count) || 250), 1500);
     const result = await discoverNeighbors(resolvedLat, resolvedLng, cap);
-    res.json({ ok: true, lat: resolvedLat, lng: resolvedLng, ...result });
+    res.json({
+      ok: true,
+      lat: resolvedLat,
+      lng: resolvedLng,
+      ...(formattedAddress ? { formattedAddress } : {}),
+      ...result,
+    });
   } catch (err) {
     res.status(500).json({ error: 'discovery_failed', detail: String(err.message || err) });
   }
