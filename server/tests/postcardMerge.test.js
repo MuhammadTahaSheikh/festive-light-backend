@@ -33,8 +33,12 @@ describe('postcardMerge', () => {
       'Hello,\nWe designed a custom lighting look',
     );
     assert.equal(
-      mergeTemplateText('Hey {{owner_first}} — your quote is ready', { ownerFirst: 'neighbor' }),
-      'Hello — your quote is ready',
+      mergeTemplateText('{{owner_eyebrow}}', { ownerFirst: 'Alex' }),
+      'PREPARED FOR ALEX',
+    );
+    assert.equal(
+      mergeTemplateText('{{owner_eyebrow}}', {}),
+      'PERSONALIZED FOR YOUR HOME',
     );
   });
 

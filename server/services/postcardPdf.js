@@ -12,7 +12,7 @@ import {
 } from './postcardStarters.js';
 import { resolveElementContent, formatPrice } from './postcardMerge.js';
 import { resolveQuotePricing } from './pricing.js';
-import { PUBLIC_DIR, RENDERS_DIR } from '../config/paths.js';
+import { PUBLIC_DIR, RENDERS_DIR, ROOT } from '../config/paths.js';
 import { PORT, PUBLIC_BASE_URL } from '../config/env.js';
 import { ownerFirstName } from './ownerLookup.js';
 
@@ -131,9 +131,23 @@ export function stripCoveredRenderSlots(side) {
   };
 }
 
-function drawFittedImage(doc, source, x, y, w, h) {
+function drawFittedImage(doc, source, x, y, w, h, { contain = false } = {}) {
+  if (contain) {
+    doc.image(source, x, y, { fit: [w, h], align: 'center', valign: 'center' });
+    return;
+  }
   // Cover the slot completely (object-fit: cover) so letterboxing never reveals layers underneath.
   doc.image(source, x, y, { cover: [w, h], align: 'center', valign: 'center' });
+}
+
+function resolveLocalPublicPath(src) {
+  const rel = String(src || '').replace(/^\//, '');
+  if (!rel || rel.includes('..')) return null;
+  const candidates = [
+    path.join(PUBLIC_DIR, rel),
+    path.join(ROOT, 'client', 'public', rel),
+  ];
+  return candidates.find((fp) => fs.existsSync(fp)) || null;
 }
 
 async function toJpegBuffer(buf) {
@@ -230,14 +244,15 @@ async function drawElement(doc, el, ctx) {
   if (el.type === 'image' || el.type === 'logo') {
     try {
       const src = el.src || el.url || '';
+      const contain = el.type === 'logo';
       if (src.startsWith('data:image')) {
         const m = src.match(/^data:(image\/[a-z0-9.+-]+);base64,(.*)$/i);
         if (m) {
-          drawFittedImage(doc, Buffer.from(m[2], 'base64'), x, y, w, h);
+          drawFittedImage(doc, Buffer.from(m[2], 'base64'), x, y, w, h, { contain });
         }
       } else if (src.startsWith('/')) {
-        const fp = path.join(PUBLIC_DIR, src.replace(/^\//, ''));
-        if (fs.existsSync(fp)) drawFittedImage(doc, fp, x, y, w, h);
+        const fp = resolveLocalPublicPath(src);
+        if (fp) drawFittedImage(doc, fp, x, y, w, h, { contain });
       }
     } catch {
       doc.rect(x, y, w, h).fill('#1b1b1f');
@@ -319,10 +334,11 @@ export function saveMailPdfs(homeId, pdfs) {
   fs.writeFileSync(path.join(dir, frontName), pdfs.front);
   fs.writeFileSync(path.join(dir, backName), pdfs.back);
   fs.writeFileSync(path.join(dir, previewName), pdfs.combined);
+  const v = Date.now();
   return {
-    frontUrl: `/mail/${frontName}`,
-    backUrl: `/mail/${backName}`,
-    previewUrl: `/mail/${previewName}`,
+    frontUrl: `/mail/${frontName}?v=${v}`,
+    backUrl: `/mail/${backName}?v=${v}`,
+    previewUrl: `/mail/${previewName}?v=${v}`,
   };
 }
 

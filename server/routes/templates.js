@@ -7,6 +7,7 @@ import {
   cloneStarterTemplate,
 } from '../db/postcardTemplates.js';
 import { getRender } from '../db/renders.js';
+import { findCampaignHomeByRenderId } from '../db/campaigns.js';
 import { buildPostcardForHome } from '../services/postcardPdf.js';
 import { formatPrice, buildQuoteUrl } from '../services/postcardMerge.js';
 import { PUBLIC_BASE_URL } from '../config/env.js';
@@ -74,16 +75,23 @@ router.post('/:id/preview', async (req, res) => {
     const template = await getPostcardTemplate(req.params.id, accountKey(req));
     if (!template) return res.status(404).json({ error: 'not_found' });
     const render = renderId ? await getRender(renderId) : null;
-    const home = {
+    const linkedHome = renderId ? await findCampaignHomeByRenderId(renderId) : null;
+    const home = linkedHome ? {
+      ...linkedHome,
+      address: linkedHome.address || render?.address || '123 Sample St, Austin, TX 78701',
+      estimated_total: linkedHome.estimated_total ?? render?.estimated_total ?? 4500,
+    } : {
       id: render?.id || `preview-${req.params.id}`,
       address: render?.address || '123 Sample St, Austin, TX 78701',
       estimated_total: render?.estimated_total || 4500,
+      owner_name: null,
     };
     const { urls } = await buildPostcardForHome(template, home, render, {
       priceFormatted: formatPrice(render?.estimated_total || 4500),
       quoteUrl: render?.id
         ? buildQuoteUrl(render.id, PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3100}`)
         : 'https://example.com/app/quote/sample',
+      ownerName: home.owner_name || '',
     });
     res.json({ ok: true, preview: urls, sampleRender: Boolean(render) });
   } catch (err) {

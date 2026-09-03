@@ -130,8 +130,18 @@ async function sendOnePostcard({
   home: campaignHome = null,
   to: providedTo = null,
 }) {
-  const address = campaignHome?.address || render.address || '';
-  const ownerName = campaignHome?.owner_name || '';
+  let resolvedHome = campaignHome;
+  if (!resolvedHome) {
+    resolvedHome = await findCampaignHomeByRenderId(render.id);
+  } else if (!String(resolvedHome.owner_name || '').trim()) {
+    const linked = await findCampaignHomeByRenderId(render.id);
+    if (linked?.owner_name) {
+      resolvedHome = { ...resolvedHome, owner_name: linked.owner_name };
+    }
+  }
+
+  const address = resolvedHome?.address || render.address || '';
+  const ownerName = resolvedHome?.owner_name || '';
 
   if (!templateCanShowHouseOnFront(template)) {
     return {
@@ -154,11 +164,11 @@ async function sendOnePostcard({
   }
 
   let to = providedTo || null;
-  const mailAddress = campaignHome?.address || render.address || address;
+  const mailAddress = resolvedHome?.address || render.address || address;
   if (!skipVerify && useLob) {
     const verification = await verifyAddressForMail(mailAddress, {
-      lat: campaignHome?.lat ?? render.lat ?? null,
-      lng: campaignHome?.lng ?? render.lng ?? null,
+      lat: resolvedHome?.lat ?? render.lat ?? null,
+      lng: resolvedHome?.lng ?? render.lng ?? null,
     });
     if (!verification.ok) {
       const accountError = isLobAccountError(verification.message);
@@ -175,8 +185,8 @@ async function sendOnePostcard({
     to = verification.to;
   }
 
-  const home = campaignHome
-    ? { ...campaignHome, address: campaignHome.address || address }
+  const home = resolvedHome
+    ? { ...resolvedHome, address: resolvedHome.address || address }
     : pseudoHomeFromRender(render, { owner_name: ownerName });
   const pricing = resolveQuotePricing(render);
   const { urls } = await buildPostcardForHome(template, home, render, {
@@ -186,8 +196,8 @@ async function sendOnePostcard({
   });
   if (!to && useLob) {
     to = (await verifyAddressForMail(address, {
-      lat: campaignHome?.lat ?? render.lat ?? null,
-      lng: campaignHome?.lng ?? render.lng ?? null,
+      lat: resolvedHome?.lat ?? render.lat ?? null,
+      lng: resolvedHome?.lng ?? render.lng ?? null,
     })).to;
   }
   if (ownerName) {

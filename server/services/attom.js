@@ -3,7 +3,7 @@ import { parseMailingAddress } from './postcardMerge.js';
 import { pickString } from './ownerNames.js';
 
 const API_BASE = 'https://api.gateway.attomdata.com/propertyapi/v1.0.0';
-const REQUEST_GAP_MS = 150;
+const REQUEST_GAP_MS = 400;
 
 export function attomEnabled() {
   return Boolean(ATTOM_API_KEY);
@@ -54,20 +54,61 @@ export function extractOwnerFromProperty(property = {}) {
   return { owner_name: combined || fallback || null };
 }
 
-function addressQueryFromHome(home) {
+/** ATTOM address2 is "City, ST ZIP" (no comma between state and zip). */
+export function addressQueryFromHome(home) {
   const full = String(home?.address || '').trim();
   const parsed = parseMailingAddress(full);
   const line1 = parsed.address_line1;
-  const line2 = [
-    parsed.address_city !== 'Unknown' ? parsed.address_city : '',
-    parsed.address_state,
-    parsed.address_zip !== '00000' ? parsed.address_zip : '',
-  ].filter(Boolean).join(', ');
+  const city = parsed.address_city !== 'Unknown' ? parsed.address_city : '';
+  const state = parsed.address_state || '';
+  const zip = parsed.address_zip !== '00000' ? String(parsed.address_zip).slice(0, 5) : '';
+  const cityStateZip = [city, [state, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
 
-  if (line1 && line2) {
-    return { address1: line1, address2: line2, address: `${line1}, ${line2}` };
+  if (line1 && city && cityStateZip) {
+    return { address1: line1, address2: cityStateZip, address: `${line1}, ${cityStateZip}` };
   }
   return { address: full };
+}
+
+/** Normalize ATTOM JSON (some errors wrap status under `Response`). */
+export function interpretAttomResponse(httpStatus, body = {}) {
+  const data = body?.Response && typeof body.Response === 'object' ? body.Response : body;
+  const status = data.status || {};
+  const msg = String(status.msg || status.message || body.message || '');
+  const code = String(status.code ?? '');
+  const properties = Array.isArray(data.property) ? data.property : [];
+
+  if (
+    httpStatus === 401
+    || httpStatus === 403
+    || /unauthorized|forbidden|invalid.*key|not authorized/i.test(msg)
+  ) {
+    return { kind: 'unauthorized', data, status, message: msg || 'Unauthorized' };
+  }
+  if (httpStatus === 429 || /over.*qps|rate limit|too many/i.test(msg)) {
+    return { kind: 'rate_limit', data, status, message: msg || 'Rate limited' };
+  }
+  if (
+    httpStatus === 400
+    || msg === 'SuccessWithoutResult'
+    || code === '400'
+    || (httpStatus === 200 && properties.length === 0)
+  ) {
+    return { kind: 'no_match', data, status, message: msg || 'SuccessWithoutResult' };
+  }
+  if (httpStatus && httpStatus >= 400) {
+    return { kind: 'error', data, status, message: msg || `attom_${httpStatus}` };
+  }
+  return { kind: 'ok', data, status, message: msg || 'Success' };
+}
+
+function attomUnauthorizedError() {
+  const err = new Error(
+    'ATTOM API key was rejected (401). The 30-day trial may have expired or the key was revoked. Get a new key at https://api.developer.attomdata.com, set ATTOM_API_KEY in .env, and restart the server.',
+  );
+  err.code = 'attom_unauthorized';
+  err.status = 401;
+  return err;
 }
 
 async function attomFetch(path, { retries = 2 } = {}) {
@@ -77,22 +118,33 @@ async function attomFetch(path, { retries = 2 } = {}) {
       apikey: ATTOM_API_KEY,
     },
   });
-  const data = await res.json().catch(() => ({}));
+  const raw = await res.json().catch(() => ({}));
+  const interpreted = interpretAttomResponse(res.status, raw);
 
-  if (res.status === 429 && retries > 0) {
+  if (interpreted.kind === 'rate_limit' && retries > 0) {
     await sleep(2000);
     return attomFetch(path, { retries: retries - 1 });
   }
 
-  if (!res.ok) {
-    const err = new Error(data.status?.msg || data.message || `attom_${res.status}`);
-    err.code = res.status === 401 || res.status === 403 ? 'attom_unauthorized' : 'attom_failed';
-    err.status = res.status;
-    err.detail = data;
+  if (interpreted.kind === 'unauthorized') {
+    const err = attomUnauthorizedError();
+    err.detail = interpreted.data;
     throw err;
   }
 
-  return data;
+  if (interpreted.kind === 'no_match') {
+    return { ...interpreted.data, _noMatch: true };
+  }
+
+  if (interpreted.kind === 'error' || interpreted.kind === 'rate_limit') {
+    const err = new Error(interpreted.message || `attom_${res.status}`);
+    err.code = 'attom_failed';
+    err.status = res.status;
+    err.detail = interpreted.data;
+    throw err;
+  }
+
+  return interpreted.data;
 }
 
 function pickBestProperty(data, query) {
@@ -122,6 +174,20 @@ function pickBestProperty(data, query) {
   return best;
 }
 
+function lookupRow(home, extra = {}) {
+  return {
+    homeId: home?.id || null,
+    address: String(home?.address || '').trim(),
+    matched: false,
+    owner_name: null,
+    owner_phone: null,
+    owner_email: null,
+    rawError: null,
+    fatal: false,
+    ...extra,
+  };
+}
+
 /** Lookup owner name for one address via ATTOM property/detailowner. */
 export async function lookupOwnerByAddress(addressOrHome) {
   const home = typeof addressOrHome === 'string'
@@ -141,8 +207,7 @@ export async function lookupOwnerByAddress(addressOrHome) {
   }
 
   const data = await attomFetch(`/property/detailowner?${params.toString()}`);
-  const statusCode = data.status?.code;
-  if (statusCode === 400 || data.status?.msg === 'SuccessWithoutResult') {
+  if (data._noMatch || data.status?.msg === 'SuccessWithoutResult') {
     return { matched: false, owner_name: null, rawError: 'no_match' };
   }
 
@@ -155,7 +220,7 @@ export async function lookupOwnerByAddress(addressOrHome) {
   return {
     matched: Boolean(owner.owner_name),
     owner_name: owner.owner_name,
-    attomId: property.identifier?.attomId || property.identifier?.attomId || null,
+    attomId: property.identifier?.attomId || null,
     apn: property.identifier?.apn || null,
     rawError: owner.owner_name ? null : 'owner_name_missing',
   };
@@ -172,30 +237,33 @@ export async function lookupOwnersByAddress(homes = []) {
   const results = [];
   for (let i = 0; i < homes.length; i += 1) {
     const home = homes[i];
-    const address = String(home?.address || '').trim();
     try {
       const row = await lookupOwnerByAddress(home);
-      results.push({
-        homeId: home.id || null,
-        address,
+      results.push(lookupRow(home, {
         matched: row.matched,
         owner_name: row.owner_name,
-        owner_phone: null,
-        owner_email: null,
         rawError: row.rawError,
-      });
+      }));
     } catch (e) {
-      results.push({
-        homeId: home.id || null,
-        address,
-        matched: false,
-        owner_name: null,
-        owner_phone: null,
-        owner_email: null,
+      const fatal = e.code === 'attom_unauthorized' || e.status === 401 || e.status === 403;
+      results.push(lookupRow(home, {
         rawError: e.message,
-      });
+        code: e.code || null,
+        fatal,
+      }));
+      if (fatal) {
+        console.warn('[attom] provider rejected the API key; remaining lookups skipped');
+        for (let j = i + 1; j < homes.length; j += 1) {
+          results.push(lookupRow(homes[j], {
+            rawError: e.message,
+            code: e.code || null,
+            fatal: true,
+          }));
+        }
+        break;
+      }
     }
-    if (i < homes.length - 1) await sleep(REQUEST_GAP_MS);
+    if (i < homes.length - 1 && results.length < homes.length) await sleep(REQUEST_GAP_MS);
   }
   return results;
 }
