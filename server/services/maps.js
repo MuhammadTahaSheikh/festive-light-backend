@@ -162,16 +162,69 @@ export async function fetchStreetViewImage(target, options = {}) {
 }
 
 export async function geocodeAddress(address) {
-  const g = await fetch(
-    `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GOOGLE_MAPS_API_KEY}`,
-  ).then((r) => r.json());
-  const first = g.results?.[0];
-  if (!first?.geometry?.location) return null;
-  return {
-    lat: first.geometry.location.lat,
-    lng: first.geometry.location.lng,
-    formattedAddress: first.formatted_address || address,
-  };
+  if (!address) return null;
+
+  if (GOOGLE_MAPS_API_KEY) {
+    try {
+      const g = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GOOGLE_MAPS_API_KEY}`,
+      ).then((r) => r.json());
+      if (g.status === 'OK') {
+        const first = g.results?.[0];
+        if (first?.geometry?.location) {
+          return {
+            lat: first.geometry.location.lat,
+            lng: first.geometry.location.lng,
+            formattedAddress: first.formatted_address || address,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('[maps] Geocoding API failed:', err.message);
+    }
+
+    // Places-only keys often deny Geocoding — resolve via Autocomplete + Place Details.
+    try {
+      const suggestions = await googleAutocompleteAddress(address);
+      const hit = suggestions.find((s) => s.placeId) || suggestions[0];
+      if (hit?.placeId) {
+        const details = await placeDetails(hit.placeId);
+        if (details.location) {
+          return {
+            lat: details.location.lat,
+            lng: details.location.lng,
+            formattedAddress: details.formattedAddress || hit.full || address,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('[maps] Places geocode fallback failed:', err.detail || err.message);
+    }
+  }
+
+  // OSM Nominatim — last resort when Google quota/restrictions block geocoding.
+  try {
+    const url = new URL('https://nominatim.openstreetmap.org/search');
+    url.searchParams.set('q', address);
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('limit', '1');
+    url.searchParams.set('addressdetails', '1');
+    const data = await fetch(url, {
+      headers: { 'User-Agent': 'FestiveLightingPros/1.0' },
+    }).then((r) => r.json());
+    const first = Array.isArray(data) ? data[0] : null;
+    if (first?.lat != null && first?.lon != null) {
+      return {
+        lat: Number(first.lat),
+        lng: Number(first.lon),
+        formattedAddress: first.display_name || address,
+      };
+    }
+  } catch (err) {
+    console.warn('[maps] Nominatim geocode fallback failed:', err.message);
+  }
+
+  return null;
 }
 
 /** Google Places API (New) autocomplete — requires GOOGLE_MAPS_API_KEY. */

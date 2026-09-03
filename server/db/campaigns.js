@@ -53,13 +53,10 @@ function homeRow(home) {
     notes: home.notes || null,
     created_by: home.created_by || null,
     created_at: new Date().toISOString(),
+    lat: home.lat ?? null,
+    lng: home.lng ?? null,
+    place_id: home.place_id || null,
   };
-  // JSON fallback stores map coordinates; Supabase needs migration 001 for lat/lng columns.
-  if (!supa) {
-    row.lat = home.lat ?? null;
-    row.lng = home.lng ?? null;
-    row.place_id = home.place_id || null;
-  }
   return row;
 }
 

@@ -186,8 +186,14 @@ export async function reverseGeocode(lat, lng) {
       url.searchParams.set('key', GOOGLE_MAPS_API_KEY);
       url.searchParams.set('result_type', 'street_address|premise|subpremise');
       const data = await fetch(url).then((r) => r.json());
-      const addr = data.results?.[0]?.formatted_address;
-      if (addr) return addr;
+      if (data.status === 'OK') {
+        for (const r of data.results || []) {
+          const hasNumber = (r.address_components || []).some((c) => c.types?.includes('street_number'));
+          if (hasNumber && r.formatted_address) return r.formatted_address;
+        }
+        const addr = data.results?.[0]?.formatted_address;
+        if (addr) return addr;
+      }
     } catch {
       /* fall through */
     }
@@ -198,15 +204,27 @@ export async function reverseGeocode(lat, lng) {
     const a = data?.address;
     if (a) {
       const line1 = [a.house_number, a.road].filter(Boolean).join(' ');
-      const city = a.city || a.town || a.village || a.hamlet;
+      const city = a.city || a.town || a.village || a.hamlet || a.suburb || a.neighbourhood;
       const state = a.state;
       const zip = a.postcode;
-      if (line1 && city && state && zip) {
+      if (line1 && city && state) {
         const st = state.length === 2 ? state.toUpperCase() : state;
-        return `${line1}, ${city}, ${st} ${zip}`;
+        return zip ? `${line1}, ${city}, ${st} ${zip}` : `${line1}, ${city}, ${st}`;
+      }
+      if (line1 && state) {
+        const st = state.length === 2 ? state.toUpperCase() : state;
+        return zip ? `${line1}, ${st} ${zip}` : `${line1}, ${st}`;
       }
     }
-    if (data?.display_name) return data.display_name;
+    if (data?.display_name) {
+      // Nominatim display_name is verbose ("10806, Water Lily Way, County…") — tighten it.
+      return String(data.display_name)
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .slice(0, 4)
+        .join(', ');
+    }
   } catch {
     /* ignore */
   }

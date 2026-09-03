@@ -1,3 +1,4 @@
+import dns from 'node:dns';
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,6 +17,10 @@ import { dbMode } from './db/index.js';
 import { migrateSeasonVariantsFileToDb } from './db/seasonVariants.js';
 import { handleStripeWebhook } from './services/stripeCheckout.js';
 import api from './routes/index.js';
+
+// Prefer IPv4 — broken IPv6 on some Windows networks causes Google Maps
+// "fetch failed" / ECONNRESET from Node (Places, Geocoding, Street View).
+dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 
