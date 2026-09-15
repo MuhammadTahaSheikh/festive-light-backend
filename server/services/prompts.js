@@ -3,8 +3,16 @@
 // forces individual roofline bulbs instead of a vague glow.
 
 const BULB_GLOW = 'Each LED emits a high-intensity pin-size point with a bright, clean four-point star sparkle and strong realistic bloom. The physical fixture remains almost invisible — never an exposed bulb, globe, recessed can light, spotlight, or fuzzy glowing orb.';
+const PIN_GLOW_MULTICOLOR = 'Each LED is the SAME tiny pin-size point as a professional warm-white permanent install — a brilliant four-point star sparkle with only a tight local halo of that pin\'s color that does not fill the gap between pins. FORBIDDEN: C9 bulbs, globe bulbs, oversized candy-colored orbs, hanging Christmas strings, a dense rainbow strip. FORBIDDEN: painting the house walls red, blue, green, or any large blotchy colored wash that fills the gaps. Color lives in the pins. Dark fascia between pins stays dark.';
 const STRICT_NO_ADJACENT = 'CRITICAL: never place two bulbs of the same color next to each other; every single bulb is a different color from both of its neighbors.';
-const STRICT_TRACK = 'Identical even spacing between all bulbs, like one continuous factory-programmed C9 light track.';
+const WARM_WHITE_SPACING = 'CRITICAL SPACING: the LEDs are spaced roughly 8 inches apart (about 3 to 4 LEDs per linear foot). There must be a clear dark gap between each individual light so the separate dots can be counted — this is a row of distinct points, NOT a continuous glowing line, light bar, ribbon, or solid strip.';
+const STRICT_TRACK = 'Identical even spacing between all pin LEDs — same flush soffit track, same pin count, and same spacing as a warm-white permanent install, never C9 globes or hanging Christmas bulbs.';
+const NO_WARM_WHITE_FALLBACK = 'FORBIDDEN: converting the whole roofline to warm white. Keep the selected color scheme on every bulb.';
+const MATCH_WARM_WHITE_PINS = [
+  'CRITICAL INSTALL LOOK: copy a professional WARM WHITE permanent lighting install, then recolor the pins.',
+  'Same tiny flush pin LEDs, same concealed soffit track, same spacing (roughly 8 inches / about 3 to 4 pins per linear foot), same pin COUNT on every eave, same four-point star sparkle, same even row.',
+  'Do not pack extra lights to show a color pattern. Do not switch to holiday C9 globes, fat orbs, a rainbow strip, or string lights.',
+].join(' ');
 
 const BRIGHT_DIM_1_3_TAIL = [
   'Identical even spacing between all pin LEDs in one continuous flush soffit track (NOT C9 bulbs, NOT a second lighting system).',
@@ -103,12 +111,12 @@ function shortBrightDim1_3(customColors) {
 const SCHEME_DESC = {
   'warm-white': `Warm white only. ${BULB_GLOW} Warm glow onto facade.`,
   'bright-dim-1-3': describeBrightDim1_3(null),
-  'cool-white': `Cool bright white only — crisp daylight-balanced white LEDs. ${BULB_GLOW} Clean modern glow onto facade.`,
-  'july-4th': `Permanent LED bulbs in a STRICT repeating three-color sequence along every lit edge: red, then white, then blue, then red, then white, then blue — exactly that order, repeating without interruption. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} Each color crisp and saturated. ${BULB_GLOW} Patriotic Fourth of July color scheme. Subtle red, white and blue glow onto facade.`,
-  'st-patricks': `Permanent LED bulbs in a STRICT alternating two-color sequence along every lit edge: emerald green, then gold, then emerald green, then gold — exactly every other bulb, repeating without interruption. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} Rich saturated St. Patrick's Day colors. ${BULB_GLOW} Festive green and gold glow onto facade.`,
-  christmas: `Permanent LED bulbs in a STRICT alternating two-color sequence along every lit edge: classic Christmas red, then green, then red, then green — exactly every other bulb, repeating without interruption. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} Rich saturated holiday colors. ${BULB_GLOW} Festive red and green glow onto facade.`,
-  halloween: `Permanent LED bulbs in a STRICT alternating two-color sequence along every lit edge: orange, then purple, then orange, then purple — exactly every other bulb, repeating without interruption. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} Rich saturated Halloween colors. ${BULB_GLOW} Spooky orange and purple glow onto facade.`,
-  holiday: `Permanent LED bulbs in a STRICT repeating four-color sequence along every lit edge: red, then green, then gold, then warm white, then repeat — exactly that order without interruption. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} Each color crisp and saturated. ${BULB_GLOW} Warm festive glow onto facade.`,
+  'cool-white': `Cool bright white only — crisp daylight-balanced white LEDs. ${NO_WARM_WHITE_FALLBACK} ${BULB_GLOW} Clean modern glow onto facade.`,
+  'july-4th': `${MATCH_WARM_WHITE_PINS} ${WARM_WHITE_SPACING} After the pins are placed at that same spacing as warm white, color them in a STRICT repeating sequence: red, then white, then blue, then red, then white, then blue — exactly that order. Do not add extra pins to fit the pattern. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} ${PIN_GLOW_MULTICOLOR} ${NO_WARM_WHITE_FALLBACK} Patriotic Fourth of July pin colors only — house walls stay natural.`,
+  'st-patricks': `${MATCH_WARM_WHITE_PINS} Pin colors in a STRICT alternating sequence: emerald green, then gold, then emerald green, then gold. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} ${PIN_GLOW_MULTICOLOR} ${NO_WARM_WHITE_FALLBACK}`,
+  christmas: `${MATCH_WARM_WHITE_PINS} Pin colors in a STRICT alternating sequence: classic Christmas red, then green, then red, then green. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} ${PIN_GLOW_MULTICOLOR} ${NO_WARM_WHITE_FALLBACK}`,
+  halloween: `${MATCH_WARM_WHITE_PINS} Pin colors in a STRICT alternating sequence: orange, then purple, then orange, then purple. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} ${PIN_GLOW_MULTICOLOR} ${NO_WARM_WHITE_FALLBACK}`,
+  holiday: `${MATCH_WARM_WHITE_PINS} Pin colors in a STRICT repeating sequence: red, then green, then gold, then warm white, then repeat. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} ${PIN_GLOW_MULTICOLOR}`,
 };
 
 const SHORT_COLOR = {
@@ -130,10 +138,24 @@ const SINGLE_HOUSE = [
 const PERMANENT_ROOFLINE = [
   'ONLY CHANGE: add a professionally installed permanent architectural LED system beneath the soffits/eaves, gable rakes, dormers, and visible front-facing architectural ledges of that single target house.',
   'Match this installation style exactly: a straight row of individual, clearly SEPARATED pin-point LEDs set flush inside a concealed color-matched aluminum track. The track hugs the underside and outer edge of each eave.',
-  'CRITICAL SPACING: the LEDs are spaced roughly 8 inches apart (about 3 to 4 LEDs per linear foot). There must be a clear dark gap between each individual light so the separate dots can be counted — this is a row of distinct points, NOT a continuous glowing line, light bar, ribbon, or solid strip.',
+  WARM_WHITE_SPACING,
   'The fixtures themselves are almost invisible. No hanging string, exposed wire, C9 bulb, globe bulb, recessed can, puck spotlight, large circular fixture, icicle light, or rope-light strip.',
   'Trace the real architecture pixel-accurately. Each individual LED must shine at high brightness as its own brilliant defined point, with a clean small four-point star sparkle and strong warm-white halo like the reference installation. Add a clearly visible, brighter warm wash beneath the trim, while preserving a dark unlit gap between every LED. The lights must be the brightest visual feature of the photo. Do not merge the dots into a solid line and do not create large isolated spotlight cones or pools down the walls.',
   'Follow every eave and gable angle, including the garage and entry rooflines visible on the front facade, keeping the same evenly spaced separated dots along each edge.',
+  SINGLE_HOUSE,
+].join(' ');
+
+/** Same pin install as warm white; colors sit on the pins without filling the 8-inch gaps. */
+const PERMANENT_ROOFLINE_MULTICOLOR = [
+  'ONLY CHANGE: add the SAME professionally installed permanent architectural LED system used for warm-white renders — tiny pin LEDs in a concealed soffit track, not holiday string lights.',
+  'Match this installation style exactly: a straight row of individual, clearly SEPARATED pin-point LEDs set flush inside a concealed color-matched aluminum track. The track hugs the underside and outer edge of each eave.',
+  WARM_WHITE_SPACING,
+  'PIN COUNT LOCK: use the same number of pins, on the same spacing, that a warm-white install would use on this house — about 3 to 4 pins per linear foot. Never a dense rainbow strip, and never extra-wide brick-length gaps.',
+  'QUALITY LOCK: each pin must have the same high-brightness four-point star sparkle as a warm-white LED — brilliant, crisp, tiny, even brightness. Lights are the brightest feature of the photo.',
+  'GAP LOCK: keep a clear dark gap between pins like warm white, but do not spread them farther apart than that. Bloom/halo around each pin must stay tight so neighboring colors never bleed into a ribbon, fog, or light bar.',
+  'WASH: optional very subtle even warm soffit wash like a warm-white install (the track lighting the trim). FORBIDDEN: red, blue, green, or rainbow wall wash; blotchy colored paint on the stucco; merging pins into a continuous colored line.',
+  'The fixtures themselves are almost invisible. No hanging string, exposed wire, C9 bulb, globe bulb, recessed can, puck spotlight, icicle light, rope-light, or neon strip.',
+  'Follow every eave and gable angle, including the garage, entry, and left-wing rooflines, keeping the same evenly spaced separated dots along each edge.',
   SINGLE_HOUSE,
 ].join(' ');
 
@@ -172,10 +194,10 @@ const DECORATIVE_ROOFLINE = [
 const NEON_ROOFLINE = [
   'ONLY CHANGE: add a professionally installed permanent architectural LED neon-flex system beneath the soffits/eaves, gable rakes, dormers, and visible front-facing architectural ledges of that single target house.',
   'Match this installation placement exactly like permanent lighting: a concealed color-matched aluminum track that hugs the UNDERSIDE and outer edge of each eave — same mount location as classic pin LEDs.',
-  'THE ONLY STYLE DIFFERENCE FROM CLASSIC: instead of separated pin-point LEDs, the track holds one thin CONTINUOUS warm neon-flex tube (silicone neon) — a slim unbroken glowing line under the soffit.',
+  'THE ONLY STYLE DIFFERENCE FROM CLASSIC: instead of separated pin-point LEDs, the track holds one thin CONTINUOUS neon-flex tube (silicone neon) — a slim unbroken glowing line under the soffit, in the SELECTED light color (warm white only when that color was chosen).',
   'CRITICAL — DO NOT CHANGE THE HOUSE: keep the exact source roof silhouette, peaks, pitch, fascia, shingles, house number, walls, and camera angle. Do not rebuild or thicken the roof. Do not place light on top of shingles or ridges. The original fascia/shingle edge must stay fully visible.',
   'The physical tube/housing is almost invisible. No hanging string, exposed wire, C9 bulb, globe bulb, recessed can, puck spotlight, icicle light, fat neon-sign ribbon, or thick brush-stroke glow.',
-  'Trace the real architecture pixel-accurately. Soft restrained bloom only — do not obscure or redraw the roof edge. Add a clearly visible warmer wash beneath the trim onto the wall, like classic permanent lighting. The lights must be the brightest visual feature of the photo.',
+  'Trace the real architecture pixel-accurately. Soft restrained bloom only — do not obscure or redraw the roof edge. Add a clearly visible same-color wash beneath the trim onto the wall, like classic permanent lighting. The lights must be the brightest visual feature of the photo.',
   'Follow every eave and gable angle, including the garage and entry rooflines visible on the front facade, along each existing edge only.',
   SINGLE_HOUSE,
 ].join(' ');
@@ -212,10 +234,10 @@ function describeNeonColors(scheme, customColors) {
   const neonScheme = {
     'warm-white': 'Warm white only continuous neon-flex (#fff3d6). Clean warm glow with restrained bloom — never a fat neon-sign ribbon on the roof edge. Warm glow onto facade beneath the trim.',
     'cool-white': 'Continuous cool bright-white neon-flex tube under every eave with subtle soft white local wash onto the facade beneath. Keep natural house colors.',
-    'july-4th': 'Continuous neon-flex tubes in a repeating red, white, and blue sequence under every eave — soft continuous glow with subtle local wall wash, not individual bulbs.',
-    'st-patricks': 'Continuous neon-flex tubes alternating emerald green and gold under every eave with subtle local wall wash.',
-    christmas: 'Continuous neon-flex tubes alternating classic Christmas red and green under every eave with subtle local wall wash.',
-    halloween: 'Continuous neon-flex tubes alternating orange and purple under every eave with subtle local wall wash.',
+    'july-4th': `Continuous neon-flex tubes in a repeating red, white, and blue sequence under every eave — soft continuous glow with subtle local wall wash, not individual bulbs. ${NO_WARM_WHITE_FALLBACK}`,
+    'st-patricks': `Continuous neon-flex tubes alternating emerald green and gold under every eave with subtle local wall wash. ${NO_WARM_WHITE_FALLBACK}`,
+    christmas: `Continuous neon-flex tubes alternating classic Christmas red and green under every eave with subtle local wall wash. ${NO_WARM_WHITE_FALLBACK}`,
+    halloween: `Continuous neon-flex tubes alternating orange and purple under every eave with subtle local wall wash. ${NO_WARM_WHITE_FALLBACK}`,
     holiday: 'Continuous neon-flex tubes in a repeating red, green, gold, and warm-white sequence under every eave with subtle local wall wash.',
   };
   return neonScheme[scheme] || neonScheme['warm-white'];
@@ -252,10 +274,10 @@ function describeColors(scheme, customColors) {
       .map((c) => (c && c.name ? `${c.name} (${c.hex})` : c && c.hex ? c.hex : null))
       .filter(Boolean);
     if (names.length === 1) {
-      return `All bulbs ${names[0]}. ${BULB_GLOW} Even colored glow onto facade.`;
+      return `All bulbs ${names[0]}. ${NO_WARM_WHITE_FALLBACK} ${BULB_GLOW} Even colored glow onto facade.`;
     }
     if (names.length) {
-      return `Permanent LED bulbs in a STRICT repeating sequence along every lit edge: ${names.join(', then ')}, then repeat — exactly that order without interruption. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} ${BULB_GLOW}`;
+      return `${MATCH_WARM_WHITE_PINS} Pin colors in a STRICT repeating sequence: ${names.join(', then ')}, then repeat. ${STRICT_NO_ADJACENT} ${STRICT_TRACK} ${PIN_GLOW_MULTICOLOR} ${NO_WARM_WHITE_FALLBACK}`;
     }
   }
   return SCHEME_DESC[scheme] || SCHEME_DESC['warm-white'];
@@ -268,6 +290,29 @@ function shortColor(scheme, customColors) {
     if (names.length) return 'strict alternating ' + names.join(' and ');
   }
   return SHORT_COLOR[scheme] || 'warm white';
+}
+
+/** True when the chosen scheme must NOT fall back to warm-white LEDs. */
+function isColoredLightScheme(scheme, customColors) {
+  if (scheme === 'july-4th' || scheme === 'st-patricks' || scheme === 'christmas'
+    || scheme === 'halloween' || scheme === 'holiday' || scheme === 'cool-white' || scheme === 'custom') {
+    return true;
+  }
+  if (scheme === 'bright-dim-1-3') {
+    const hex = normalizeHex(Array.isArray(customColors) && customColors[0] ? customColors[0].hex : null);
+    return Boolean(hex && hex !== '#fff3d6');
+  }
+  return false;
+}
+
+/** True when colors alternate (4th of July, Christmas, etc.) — must still look like warm-white pin LEDs. */
+function isMulticolorPinScheme(scheme, customColors) {
+  if (scheme === 'july-4th' || scheme === 'st-patricks' || scheme === 'christmas'
+    || scheme === 'halloween' || scheme === 'holiday') {
+    return true;
+  }
+  if (scheme === 'custom' && Array.isArray(customColors) && customColors.length > 1) return true;
+  return false;
 }
 
 const PRESERVE_HOUSE = [
@@ -319,43 +364,35 @@ export function buildRenderPrompt({ scheme, customColors, landscape, decor, deco
   const isChristmas = serviceType === 'christmas' || scheme === 'christmas';
   const isCoolWhite = scheme === 'cool-white';
   const isBrightDim = !isNeon && scheme === 'bright-dim-1-3';
+  const isColored = isColoredLightScheme(scheme, customColors);
+  const isMulticolorPins = !isNeon && isMulticolorPinScheme(scheme, customColors);
   const rooflineInstructions = isNeon
     ? (isChristmas ? CHRISTMAS_NEON_FASCIA : NEON_ROOFLINE)
     : isChristmas
       ? CHRISTMAS_FASCIA
       : isPermanent
-        ? (isBrightDim ? PERMANENT_ROOFLINE_BRIGHT_DIM : PERMANENT_ROOFLINE)
+        ? (isBrightDim ? PERMANENT_ROOFLINE_BRIGHT_DIM : isMulticolorPins ? PERMANENT_ROOFLINE_MULTICOLOR : PERMANENT_ROOFLINE)
         : DECORATIVE_ROOFLINE;
-  const brightDimHex = isBrightDim && Array.isArray(customColors) && customColors[0]
-    ? normalizeHex(customColors[0].hex)
-    : null;
-  const brightDimIsDark = brightDimHex && hexLuma(brightDimHex) != null && hexLuma(brightDimHex) < 0.08;
-  const brightDimIsCustomColor = Boolean(brightDimHex && brightDimHex !== '#fff3d6');
 
+  // Lead with color for any non-warm scheme so the model cannot fall back to a warm-white house.
+  // For neon, still lock roof geometry first, then color.
   // For bright-dim, lead with color + pattern so the model doesn't fall back to dual C9 + warm cans.
-  // For neon, lead with geometry lock so the model does not rebuild the roof when adding continuous tubes.
-  const lines = isBrightDim
+  const lines = isNeon || isMulticolorPins
     ? [
+      PRESERVE_HOUSE,
+      rooflineInstructions,
+      colorText,
+    ]
+    : [
       PRESERVE_HOUSE,
       colorText,
       rooflineInstructions,
-    ]
-    : isNeon
-      ? [
-        PRESERVE_HOUSE,
-        rooflineInstructions,
-        colorText,
-      ]
-      : [
-        PRESERVE_HOUSE,
-        rooflineInstructions,
-        colorText,
-      ];
+    ];
   // Same daytime→evening ambient for classic and neon (neon only differs in roofline tube vs pins).
   let ambientEvening = isCoolWhite
     ? 'Shift ambient light to blue-hour dusk with a deep blue evening sky. Preserve the source sky dynamically: if the original photo has clouds, keep those same clouds; if the original sky is clear with no clouds, leave it clear — never invent clouds and never erase real ones. Use crisp neutral/cool white LEDs around 5000K with clean white wall wash; absolutely no amber, yellow, or warm tint in the exterior lights. Keep any existing window light subtle. Not daytime, not pitch-black night.'
-    : isBrightDim && (brightDimIsDark || brightDimIsCustomColor)
-      ? 'Shift ambient light to blue-hour dusk with a deep blue evening sky so the bulbs read clearly. Preserve the source sky dynamically: keep clouds only if they already exist in the original photo; if there are no clouds, do not add any. Keep any existing window light subtle. The ADDED roofline LED color must follow the COLOR LOCK above — do not warm-tint those LEDs to amber or warm white. Not daytime, not pitch-black night.'
+    : isColored
+      ? 'Shift ambient light to blue-hour dusk with a deep blue evening sky so the bulbs read clearly. Preserve the source sky dynamically: keep clouds only if they already exist in the original photo; if there are no clouds, do not add any. Keep any existing window light subtle. The ADDED roofline LED color must follow the selected color scheme — do not warm-tint those LEDs to amber or warm white. Not daytime, not pitch-black night.'
       : 'Shift ambient light to blue-hour dusk with a deep blue evening sky. Soft dusk light so the house and yard stay readable, while the warm roofline LEDs remain the brightest eye-catching feature. Preserve the source sky dynamically: if the original photo has clouds, keep those same clouds; if the original sky is clear with no clouds, leave it clear — never invent clouds and never erase real ones. Keep any existing window light subtle. Natural realistic lighting — not neon, not cartoon, not daytime, not pitch-black night.';
   // Neon reuses the exact classic evening prompt; only drop the classic "not neon" ban so continuous tubes aren't blocked.
   if (isNeon) {
@@ -368,8 +405,23 @@ export function buildRenderPrompt({ scheme, customColors, landscape, decor, deco
       ? 'The thin neon-flex tube must follow the exact contour of each eave and gable rake — same path a professional permanent-lighting installer would run under the soffit.'
       : 'The LED track must follow the exact contour of each architectural line — same path a professional installer would measure with a tape measure along the eaves.',
   );
+  if (isMulticolorPins && scheme !== 'july-4th') {
+    lines.push(
+      'LOOK LOCK: same tiny pin-LED soffit install as warm white, same spacing (roughly 8 inches / 3–4 pins per foot), same pin count. Color the pins only. Do not pack extra lights. Do not enlarge pins into globes. Do not paint red/blue/green wash across the walls or fill the gaps with colored bloom.',
+    );
+  }
+  if (scheme === 'july-4th' && !isNeon) {
+    lines.push(
+      'Keep this same red, white, and blue pin-LED look. The only change is spacing: put an 8-inch dark gap between neighboring pins, matching warm white. Do not change colors, pin size, or sparkle.',
+    );
+  }
   if (isBrightDim) {
     lines.push('FINAL CHECK: single flush pin-LED soffit track; 1 bright + 3 dim; wash cones only on bright LEDs and same color as LEDs; no C9 bulbs; no extra warm-white soffit downlights.');
+  }
+  if (isMulticolorPins && scheme !== 'july-4th') {
+    lines.push('FINAL CHECK: same tiny crisp pin LEDs as warm white; same spacing as warm white (about 3–4 pins per foot); selected colors on the pins only; no rainbow wall wash; no merged colored strip.');
+  } else if (isColored && !isNeon && scheme !== 'july-4th') {
+    lines.push('FINAL CHECK: roofline LED colors must match the selected scheme on every bulb — never substitute a warm-white house. Keep 8-inch gaps between lights.');
   }
   if (isNeon) {
     lines.push('FINAL CHECK: same house roof as source (do not rebuild top); neon-flex ONLY under soffit like classic permanent track — thin continuous tube NOT fat ribbon on the roof edge; same blue-hour evening + subtle window glow as classic; no pin LEDs.');
@@ -408,19 +460,22 @@ export function buildShortPrompt({ scheme, customColors, landscape, decor, decor
   const isPermanent = serviceType === 'permanent';
   const isChristmas = serviceType === 'christmas' || scheme === 'christmas';
   const isBrightDim = !isNeon && scheme === 'bright-dim-1-3';
+  const isColored = isColoredLightScheme(scheme, customColors);
   const bits = [
     'exact same house photo, same garden and plants unchanged, exact same roof geometry no new gables or second roof on top',
     isNeon
       ? (isChristmas
-        ? 'mount continuous soft golden LED neon-flex under every fascia eave gable dormer garage and porch roof edge of the main center house, soft wash into walls beneath, never outline windows, never add landscape uplights, never individual bulbs'
-        : 'exact same house roof unchanged, add thin continuous warm-white neon-flex in concealed soffit track under eaves like permanent lighting not on shingles, blue-hour dusk, restrained bloom, NOT pin LEDs, NOT fat neon ribbon')
+        ? 'mount continuous LED neon-flex under every fascia eave gable dormer garage and porch roof edge of the main center house in the selected colors, soft same-color wash into walls beneath, never outline windows, never add landscape uplights, never individual bulbs'
+        : 'exact same house roof unchanged, add thin continuous neon-flex in the selected light color in concealed soffit track under eaves like permanent lighting not on shingles, blue-hour dusk, restrained bloom, NOT pin LEDs, NOT fat neon ribbon, NOT warm white unless that color was selected')
       : isChristmas
       ? 'mount individual bright Christmas LED points directly on the visible face or lower edge of every fascia board on each eave gable dormer garage and porch roof of the main center house, consistent 8-inch centers with a clear dark gap between countable points, clean small four-point sparkle and strong festive halo, discreet wire and clips, never on shingles roof surfaces ridges walls or windows, never a solid strip merged line sagging loop icicle or oversized bulb'
       : isPermanent && isBrightDim
       ? 'ONE system only: flush pin-size permanent LEDs in concealed soffit track under eaves/gables of main center house, 8-inch spacing, STRICT 1-bright-then-3-dim pattern, only every 4th LED bright with same-color wall-wash cone, other three faint dots no wash, NEVER C9 bulbs, NEVER separate warm-white downlight row, never equal brightness, never dual lighting systems'
       : isPermanent
-      ? 'only add a row of individual clearly separated pin-size permanent LED points set flush in concealed trim track tight beneath every eave and gable of the main center house, spaced about 8 inches apart with a dark gap between each dot so the points are countable, distinct dots NOT a continuous line light bar ribbon or solid strip, each LED shines at high brightness as a brilliant defined point with clean small four-point star sparkle and strong warm-white halo plus clearly visible warm trim wash, lights are the brightest feature, almost invisible physical fixtures, never merged glowing lines, downlights, recessed cans, spotlights, hanging strings, globes, or bulbs'
-      : 'only add individual visible C9 LED bulbs with even factory-programmed spacing on every roofline eave gable cornice and horizontal architectural ledge of the main center house only',
+      ? (isColored
+        ? 'only add a row of individual clearly separated pin-size permanent LED points set flush in concealed trim track tight beneath every eave and gable of the main center house, SAME tiny crisp star-sparkle pins and SAME spacing as a warm-white install (about 3 to 4 pins per foot), color on the pins only, no rainbow wall wash, no merged colored strip, never C9 globes'
+        : 'only add a row of individual clearly separated pin-size permanent LED points set flush in concealed trim track tight beneath every eave and gable of the main center house, spaced about 8 inches apart with a dark gap between each dot so the points are countable, distinct dots NOT a continuous line light bar ribbon or solid strip, each LED shines at high brightness as a brilliant defined point with clean small four-point star sparkle and strong warm-white halo plus clearly visible warm trim wash, lights are the brightest feature, almost invisible physical fixtures, never merged glowing lines, downlights, recessed cans, spotlights, hanging strings, globes, or bulbs')
+      : 'only add individual visible C9 LED bulbs with even factory-programmed 8-inch spacing on every roofline eave gable cornice and horizontal architectural ledge of the main center house only',
     'do not light neighboring or adjacent houses — leave them completely dark',
     isNeon
       ? colorText + ', soft realistic neon bloom, photorealistic architectural neon'
@@ -428,7 +483,9 @@ export function buildShortPrompt({ scheme, customColors, landscape, decor, decor
     'do not redesign landscaping or architecture',
     scheme === 'cool-white'
       ? 'blue-hour dusk deep blue sky, preserve original clouds or clear sky exactly, 5000K crisp white exterior lighting, clean white wall wash, no amber or yellow tint, photorealistic'
-      : 'blue-hour dusk deep blue sky, preserve original clouds or clear sky exactly no invented clouds, warm LEDs eye-catching, soft dusk not pitch black, subtle existing windows, photorealistic',
+      : isColored
+        ? 'blue-hour dusk deep blue sky, preserve original clouds or clear sky exactly no invented clouds, selected-color LEDs eye-catching NEVER warm white, soft dusk not pitch black, subtle existing windows, photorealistic'
+        : 'blue-hour dusk deep blue sky, preserve original clouds or clear sky exactly no invented clouds, warm LEDs eye-catching, soft dusk not pitch black, subtle existing windows, photorealistic',
   ];
   if (landscape) bits.push('subtle uplights only on existing trees, no new plants');
   if (decor === 'christmas' || serviceType === 'christmas') {

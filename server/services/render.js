@@ -89,9 +89,10 @@ export async function doRender(imageBuffer, mimeType, opts) {
   }
   if (p === 'gemini') {
     const isBrightDim = !isNeon && opts?.scheme === 'bright-dim-1-3';
+    const isMulticolor = !isNeon && ['july-4th', 'st-patricks', 'christmas', 'halloween', 'holiday'].includes(opts?.scheme);
     return renderWithGemini(imageBuffer, mimeType, buildRenderPrompt(opts), {
-      // Lower temperature keeps house geometry stable across re-runs.
-      temperature: custom ? 0.7 : (isBrightDim || isNeon) ? 0.2 : 0.25,
+      // Lower temperature keeps house geometry and pin spacing stable across re-runs.
+      temperature: custom ? 0.7 : (isBrightDim || isNeon || isMulticolor) ? 0.2 : 0.25,
     });
   }
   if (p === 'cloudflare') return renderWithCloudflare(imageBuffer, buildShortPrompt(opts), { neon: isNeon });
