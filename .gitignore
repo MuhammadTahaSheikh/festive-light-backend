@@ -8,6 +8,10 @@ npm-debug.log*
 .cursor/
 *.pdf
 
+# Local postcard design previews
+tmp-*/
+tmp-*.png
+
 # Local clones used by scripts/sync-push-github.js
 .github-mirrors/
 
