@@ -191,7 +191,9 @@ export function mergeTemplateText(text, ctx) {
   const rawFirst = String(ctx.ownerFirst || owner || '').trim();
   const ownerFirst = /^neighbor$/i.test(rawFirst) ? '' : rawFirst;
   const greeting = professionalGreeting(ownerFirst);
+  const hiName = ownerFirst ? `Hi ${ownerFirst},` : 'Hi,';
   return String(text || '')
+    .replace(/\{\{hi_name\}\}/g, hiName)
     .replace(/\{\{price\}\}/g, ctx.priceFormatted || '')
     .replace(/\{\{feet\}\}/g, ctx.rooflineFeet != null ? String(ctx.rooflineFeet) : '')
     .replace(/\{\{address\}\}/g, ctx.address || '')

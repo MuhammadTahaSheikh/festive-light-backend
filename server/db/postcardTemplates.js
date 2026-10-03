@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { supa, readJson, writeJson } from './client.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { STARTER_TEMPLATES } from '../services/postcardStarters.js';
+import { STARTER_TEMPLATES, normalizePostcardFormat } from '../services/postcardStarters.js';
 import { stripCoveredRenderSlots } from '../services/postcardPdf.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -32,6 +32,11 @@ function listJson(key) {
   return readAll().filter((t) => (t.account_key || 'default') === key);
 }
 
+function withFormat(t) {
+  if (!t) return t;
+  return { ...t, format: normalizePostcardFormat(t.format) };
+}
+
 function cleanSides(payload) {
   return {
     ...payload,
@@ -50,19 +55,19 @@ async function listCustom(key) {
     if (error) {
       if (missingTableError(error)) {
         supaTableAvailable = false;
-        return listJson(key);
+        return listJson(key).map(withFormat);
       }
       throw new Error(error.message);
     }
     supaTableAvailable = true;
-    return data || [];
+    return (data || []).map(withFormat);
   }
-  return listJson(key);
+  return listJson(key).map(withFormat);
 }
 
 export async function listPostcardTemplates(accountKey = 'default') {
-  const key = normKey(accountKey);
-  const custom = await listCustom(key);
+  const custom = await listCustom(normKey(accountKey));
+  custom.sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
   return { starters: STARTER_TEMPLATES, custom };
 }
 
@@ -75,14 +80,14 @@ export async function getPostcardTemplate(id, accountKey = 'default') {
     if (error) {
       if (missingTableError(error)) {
         supaTableAvailable = false;
-        return readAll().find((t) => t.id === id && (t.account_key || 'default') === key) || null;
+        return withFormat(readAll().find((t) => t.id === id && (t.account_key || 'default') === key) || null);
       }
       throw new Error(error.message);
     }
-    if (data && data.account_key === key) return data;
+    if (data && data.account_key === key) return withFormat(data);
     return null;
   }
-  return readAll().find((t) => t.id === id && (t.account_key || 'default') === key) || null;
+  return withFormat(readAll().find((t) => t.id === id && (t.account_key || 'default') === key) || null);
 }
 
 export async function savePostcardTemplate(accountKey, payload) {
@@ -94,7 +99,7 @@ export async function savePostcardTemplate(accountKey, payload) {
     account_key: key,
     name: cleaned.name || 'Untitled template',
     category: cleaned.category || 'Uncategorized',
-    format: cleaned.format || '6x9',
+    format: normalizePostcardFormat(cleaned.format),
     front: cleaned.front || { background: '#0b0b0d', elements: [] },
     back: cleaned.back || { background: '#141416', elements: [] },
     is_starter: false,

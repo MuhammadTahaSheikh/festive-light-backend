@@ -4,51 +4,75 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import sharp from 'sharp';
 import {
-  POSTCARD_W_IN,
-  POSTCARD_H_IN,
   POSTCARD_BLEED_IN,
-  POSTCARD_PDF_W_IN,
-  POSTCARD_PDF_H_IN,
+  postcardDims,
 } from './postcardStarters.js';
 import { resolveElementContent, formatPrice } from './postcardMerge.js';
 import { resolveQuotePricing } from './pricing.js';
 import { PUBLIC_DIR, RENDERS_DIR } from '../config/paths.js';
 import { PORT, PUBLIC_BASE_URL } from '../config/env.js';
+import { fileURLToPath } from 'node:url';
 import { ownerFirstName } from './ownerLookup.js';
+import { layoutAnchoredElements } from './anchorLayout.js';
 
 const IN = 72; // points per inch
-const PAGE_SIZE = [POSTCARD_PDF_W_IN * IN, POSTCARD_PDF_H_IN * IN];
+const FONT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fonts');
+const CUSTOM_FONTS = {
+  Pacifico: path.join(FONT_DIR, 'Pacifico-Regular.ttf'),
+  'Poppins-Regular': path.join(FONT_DIR, 'Poppins-Regular.ttf'),
+  'Poppins-Medium': path.join(FONT_DIR, 'Poppins-Medium.ttf'),
+  'Poppins-SemiBold': path.join(FONT_DIR, 'Poppins-SemiBold.ttf'),
+  'Poppins-Bold': path.join(FONT_DIR, 'Poppins-Bold.ttf'),
+  'Poppins-ExtraBold': path.join(FONT_DIR, 'Poppins-ExtraBold.ttf'),
+  'Poppins-BoldItalic': path.join(FONT_DIR, 'Poppins-BoldItalic.ttf'),
+  'Poppins-BlackItalic': path.join(FONT_DIR, 'Poppins-BlackItalic.ttf'),
+};
+
+function registerCustomFonts(doc) {
+  for (const [name, file] of Object.entries(CUSTOM_FONTS)) {
+    if (fs.existsSync(file)) doc.registerFont(name, file);
+  }
+}
+
+function fontForElement(el) {
+  if (el.fontFamily && CUSTOM_FONTS[el.fontFamily]) return el.fontFamily;
+  if (el.fontFamily === 'Poppins') return el.bold ? 'Poppins-Bold' : 'Poppins-Regular';
+  return el.bold ? 'Helvetica-Bold' : 'Helvetica';
+}
 const EDGE_EPS = 0.05;
 
 /**
- * Map template inches (9×6 trim) onto the Lob bleed page (9.25×6.25).
+ * Map template inches (trim) onto the Lob bleed page.
  * Edge-to-edge art extends into the 1/8" bleed so trim does not leave a gap.
  */
-export function elementPdfBox(el) {
+export function elementPdfBox(el, dims = postcardDims('6x9')) {
   let x = Number(el.x) || 0;
   let y = Number(el.y) || 0;
   let w = Number(el.w) || 1;
   let h = Number(el.h) || 1;
+  const trimW = dims.w;
+  const trimH = dims.h;
+  const bleed = dims.bleed ?? POSTCARD_BLEED_IN;
   const extend = el.type === 'render' || el.type === 'image' || el.type === 'logo' || el.type === 'rect';
   if (extend) {
     if (x <= EDGE_EPS) {
-      w += x + POSTCARD_BLEED_IN;
-      x = -POSTCARD_BLEED_IN;
+      w += x + bleed;
+      x = -bleed;
     }
     if (y <= EDGE_EPS) {
-      h += y + POSTCARD_BLEED_IN;
-      y = -POSTCARD_BLEED_IN;
+      h += y + bleed;
+      y = -bleed;
     }
-    if (x + w >= POSTCARD_W_IN - EDGE_EPS) {
-      w = POSTCARD_W_IN + POSTCARD_BLEED_IN - x;
+    if (x + w >= trimW - EDGE_EPS) {
+      w = trimW + bleed - x;
     }
-    if (y + h >= POSTCARD_H_IN - EDGE_EPS) {
-      h = POSTCARD_H_IN + POSTCARD_BLEED_IN - y;
+    if (y + h >= trimH - EDGE_EPS) {
+      h = trimH + bleed - y;
     }
   }
   return {
-    x: (x + POSTCARD_BLEED_IN) * IN,
-    y: (y + POSTCARD_BLEED_IN) * IN,
+    x: (x + bleed) * IN,
+    y: (y + bleed) * IN,
     w: w * IN,
     h: h * IN,
   };
@@ -116,6 +140,7 @@ export function renderCoveredByArtwork(renderEl, elements = []) {
   const area = elementArea(renderEl);
   if (area <= 0) return false;
   return elements.some((el) => {
+    if (el.overlay) return false;
     if ((el.type !== 'image' && el.type !== 'logo') || !el.src) return false;
     return overlapArea(renderEl, el) / area >= 0.45;
   });
@@ -131,8 +156,18 @@ export function stripCoveredRenderSlots(side) {
   };
 }
 
-function drawFittedImage(doc, source, x, y, w, h) {
-  // Cover the slot completely (object-fit: cover) so letterboxing never reveals layers underneath.
+function drawFittedImage(doc, source, x, y, w, h, fit = 'cover') {
+  // Default cover so letterboxing never reveals layers underneath.
+  // Opt-in contain is for logos/mascots that must not be cropped.
+  // Fill stretches designed backgrounds (waves/banners) across 6×11.
+  if (fit === 'contain') {
+    doc.image(source, x, y, { fit: [w, h], align: 'center', valign: 'center' });
+    return;
+  }
+  if (fit === 'fill' || fit === 'stretch') {
+    doc.image(source, x, y, { width: w, height: h });
+    return;
+  }
   doc.image(source, x, y, { cover: [w, h], align: 'center', valign: 'center' });
 }
 
@@ -197,7 +232,8 @@ export async function loadRenderImage(imageRef) {
 }
 
 async function drawElement(doc, el, ctx) {
-  const { x, y, w, h } = elementPdfBox(el);
+  const dims = ctx.dims || postcardDims('6x9');
+  const { x, y, w, h } = elementPdfBox(el, dims);
   const color = el.color || '#ffffff';
   const fontSize = el.fontSize || 14;
   const align = el.align || 'left';
@@ -233,11 +269,11 @@ async function drawElement(doc, el, ctx) {
       if (src.startsWith('data:image')) {
         const m = src.match(/^data:(image\/[a-z0-9.+-]+);base64,(.*)$/i);
         if (m) {
-          drawFittedImage(doc, Buffer.from(m[2], 'base64'), x, y, w, h);
+          drawFittedImage(doc, Buffer.from(m[2], 'base64'), x, y, w, h, el.fit);
         }
       } else if (src.startsWith('/')) {
         const fp = path.join(PUBLIC_DIR, src.replace(/^\//, ''));
-        if (fs.existsSync(fp)) drawFittedImage(doc, fp, x, y, w, h);
+        if (fs.existsSync(fp)) drawFittedImage(doc, fp, x, y, w, h, el.fit);
       }
     } catch {
       doc.rect(x, y, w, h).fill('#1b1b1f');
@@ -252,29 +288,57 @@ async function drawElement(doc, el, ctx) {
   }
 
   const text = resolveElementContent(el, ctx);
-  doc.fillColor(color);
-  doc.font(el.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize);
-  doc.text(text, x, y, { width: w, height: h, align });
+  doc.font(fontForElement(el)).fontSize(fontSize);
+  const textOpts = {
+    width: w,
+    height: h,
+    align,
+    lineGap: el.lineGap ?? 0,
+  };
+  let textY = y;
+  if (el.follow) {
+    const lines = String(text || '').split('\n').length;
+    const block = lines * fontSize * 1.5;
+    textY = y + Math.max(0, (h - block) / 2);
+  }
+  if (el.strokeColor) {
+    doc.fillColor(color);
+    doc.strokeColor(el.strokeColor);
+    doc.lineWidth(Number(el.strokeWidth) || 1.6);
+    doc.text(text, x, textY, { ...textOpts, height: Math.max(fontSize, h - (textY - y)), fill: true, stroke: true });
+  } else {
+    doc.fillColor(color);
+    doc.text(text, x, textY, { ...textOpts, height: Math.max(fontSize, h - (textY - y)) });
+  }
   return Promise.resolve();
 }
 
 async function drawSide(doc, side, ctx) {
   const cleaned = stripCoveredRenderSlots(side);
   const bg = cleaned?.background || '#0b0b0d';
-  doc.rect(0, 0, POSTCARD_PDF_W_IN * IN, POSTCARD_PDF_H_IN * IN).fill(bg);
-  const elements = sortElements(cleaned?.elements || []);
+  const dims = ctx.dims || postcardDims('6x9');
+  doc.rect(0, 0, dims.pdfW * IN, dims.pdfH * IN).fill(bg);
+  const elements = sortElements(layoutAnchoredElements(cleaned?.elements || []));
   for (const el of elements) {
     await drawElement(doc, el, ctx);
   }
 }
 
+function pdfPageSize(dims) {
+  return [dims.pdfW * IN, dims.pdfH * IN];
+}
+
 function pdfBufferFromSides(sides, ctx) {
+  const dims = ctx.dims || postcardDims('6x9');
+  const pageSize = pdfPageSize(dims);
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
-      size: PAGE_SIZE,
+      size: pageSize,
       margin: 0,
       autoFirstPage: true,
+      info: { Title: `Postcard ${dims.label || dims.format}` },
     });
+    registerCustomFonts(doc);
     const chunks = [];
     doc.on('data', (c) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -283,7 +347,7 @@ function pdfBufferFromSides(sides, ctx) {
     (async () => {
       try {
         for (let i = 0; i < sides.length; i += 1) {
-          if (i > 0) doc.addPage({ size: PAGE_SIZE, margin: 0 });
+          if (i > 0) doc.addPage({ size: pageSize, margin: 0 });
           await drawSide(doc, sides[i], ctx);
         }
         doc.end();
@@ -299,30 +363,36 @@ function sideToPdfBuffer(side, ctx) {
 }
 
 export async function renderPostcardPdfs(template, ctx) {
+  const dims = postcardDims(template?.format);
+  const next = { ...ctx, dims };
   const personalized = personalizeFrontImage(template);
   const frontSide = personalized.front || {};
   const backSide = personalized.back || {};
   const [front, back, combined] = await Promise.all([
-    sideToPdfBuffer(frontSide, ctx),
-    sideToPdfBuffer(backSide, ctx),
-    pdfBufferFromSides([frontSide, backSide], ctx),
+    sideToPdfBuffer(frontSide, next),
+    sideToPdfBuffer(backSide, next),
+    pdfBufferFromSides([frontSide, backSide], next),
   ]);
-  return { front, back, combined };
+  return { front, back, combined, dims };
 }
 
-export function saveMailPdfs(homeId, pdfs) {
+export function saveMailPdfs(homeId, pdfs, format = '6x9') {
   const dir = path.join(PUBLIC_DIR, 'mail');
   fs.mkdirSync(dir, { recursive: true });
-  const frontName = `${homeId}-front.pdf`;
-  const backName = `${homeId}-back.pdf`;
-  const previewName = `${homeId}.pdf`;
+  const size = postcardDims(format).format;
+  const stamp = Date.now();
+  const frontName = `${homeId}-${size}-front.pdf`;
+  const backName = `${homeId}-${size}-back.pdf`;
+  const previewName = `${homeId}-${size}.pdf`;
   fs.writeFileSync(path.join(dir, frontName), pdfs.front);
   fs.writeFileSync(path.join(dir, backName), pdfs.back);
   fs.writeFileSync(path.join(dir, previewName), pdfs.combined);
   return {
-    frontUrl: `/mail/${frontName}`,
-    backUrl: `/mail/${backName}`,
-    previewUrl: `/mail/${previewName}`,
+    frontUrl: `/mail/${frontName}?t=${stamp}`,
+    backUrl: `/mail/${backName}?t=${stamp}`,
+    previewUrl: `/mail/${previewName}?t=${stamp}`,
+    format: size,
+    label: postcardDims(size).label,
   };
 }
 
@@ -341,7 +411,7 @@ export async function buildPostcardForHome(template, home, render, options = {})
     renderImagePath: render?.image_url || null,
   };
   const pdfs = await renderPostcardPdfs(template, ctx);
-  const urls = saveMailPdfs(home.id, pdfs);
+  const urls = saveMailPdfs(home.id, pdfs, template?.format);
   return { pdfs, urls, ctx };
 }
 

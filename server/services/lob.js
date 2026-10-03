@@ -12,6 +12,7 @@ import {
   enrichAddressString,
   resolveMailingAddress,
 } from './postcardMerge.js';
+import { normalizePostcardFormat } from './postcardStarters.js';
 
 const LOB_API = 'https://api.lob.com/v1';
 
@@ -176,7 +177,7 @@ async function lobFetch(path, body) {
   return data;
 }
 
-export async function sendPostcardViaLob({ to, frontUrl, backUrl, description }) {
+export async function sendPostcardViaLob({ to, frontUrl, backUrl, description, size = '6x9' }) {
   if (!LOB_API_KEY) {
     throw new Error('lob_not_configured');
   }
@@ -193,7 +194,7 @@ export async function sendPostcardViaLob({ to, frontUrl, backUrl, description })
     from: mailFromAddress(),
     front,
     back,
-    size: '6x9',
+    size: normalizePostcardFormat(size),
     mail_type: 'usps_first_class',
     use_type: 'marketing',
   });

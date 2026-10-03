@@ -32,16 +32,65 @@ export function extractOwnerFromRecord(record = {}) {
   return { owner_name: name || null };
 }
 
-function isMatchedRecord(data = {}) {
-  const status = String(data.match_status || data.status || data.matchStatus || '').toLowerCase();
-  if (status && ['no_match', 'not_found', 'unmatched', 'miss'].includes(status)) return false;
-  if (status && ['matched', 'match', 'ok', 'success'].includes(status)) return true;
-  return Boolean(
-    data.property_id
-    || data.owner_1_full_name
-    || data.owner1_full_name
-    || extractOwnerFromRecord(data).owner_name,
-  );
+function houseNumber(address) {
+  const match = String(address || '').trim().match(/^(\d+[A-Za-z]?)/);
+  return match ? match[1].toLowerCase() : '';
+}
+
+function zipCode(address) {
+  const match = String(address || '').match(/\b(\d{5})(?:-\d{4})?\b/);
+  return match ? match[1] : '';
+}
+
+/** Reject a high-confidence hit that is a different house or ZIP. */
+export function addressAgrees(requested, returned) {
+  const wantNum = houseNumber(requested);
+  const gotNum = houseNumber(returned);
+  if (wantNum && gotNum && wantNum !== gotNum) return false;
+  const wantZip = zipCode(requested);
+  const gotZip = zipCode(returned);
+  if (wantZip && gotZip && wantZip !== gotZip) return false;
+  return true;
+}
+
+/** Owner fields live on `property` inside the lookup envelope. */
+export function parseLookupResponse(data = {}, requestedAddress = '') {
+  const status = String(data.status || data.match_status || data.matchStatus || '').toLowerCase();
+  const record = data.property && typeof data.property === 'object' ? data.property : data;
+  const owner = extractOwnerFromRecord(record);
+  const propertyId = record.property_id || data.match?.property_id || null;
+  const propertyAddress = record.property_address || data.match?.address || null;
+
+  if (status && status !== 'matched') {
+    return {
+      matched: false,
+      owner_name: null,
+      property_id: propertyId,
+      apn: record.apn || data.match?.apn || null,
+      property_address: propertyAddress,
+      rawError: status,
+    };
+  }
+
+  if (propertyAddress && requestedAddress && !addressAgrees(requestedAddress, propertyAddress)) {
+    return {
+      matched: false,
+      owner_name: null,
+      property_id: propertyId,
+      apn: record.apn || null,
+      property_address: propertyAddress,
+      rawError: 'address_mismatch',
+    };
+  }
+
+  return {
+    matched: Boolean(owner.owner_name),
+    owner_name: owner.owner_name,
+    property_id: propertyId,
+    apn: record.apn || null,
+    property_address: propertyAddress,
+    rawError: owner.owner_name ? null : (status || 'no_match'),
+  };
 }
 
 async function assessorsearchFetch(path, { retries = 2 } = {}) {
@@ -70,30 +119,30 @@ async function assessorsearchFetch(path, { retries = 2 } = {}) {
   return data;
 }
 
+/**
+ * The lookup endpoint takes one free-form address. City and state are not
+ * separate query fields, so the street, city, state, and ZIP must stay together.
+ * @see https://assessorsearch.com/property-data-api/docs
+ */
+export function buildPropertySearchPath(address) {
+  const raw = String(address || '')
+    .trim()
+    .replace(/,?\s*(USA|United States|U\.S\.A\.?)\s*$/i, '')
+    .trim();
+  if (!raw) return null;
+  const params = new URLSearchParams();
+  params.set('address', raw);
+  return `/properties?${params.toString()}`;
+}
+
 /** Lookup owner name for one address (1 API credit when matched). */
 export async function lookupOwnerByAddress(address) {
-  const q = encodeURIComponent(String(address || '').trim());
-  if (!q) {
+  const path = buildPropertySearchPath(address);
+  if (!path) {
     return { matched: false, owner_name: null, rawError: 'missing_address' };
   }
-  const data = await assessorsearchFetch(`/properties?address=${q}`);
-  if (!isMatchedRecord(data)) {
-    return {
-      matched: false,
-      owner_name: null,
-      rawError: data.match_status || data.status || 'no_match',
-      property_id: data.property_id || null,
-    };
-  }
-  const owner = extractOwnerFromRecord(data);
-  return {
-    matched: Boolean(owner.owner_name),
-    owner_name: owner.owner_name,
-    property_id: data.property_id || null,
-    apn: data.apn || null,
-    property_address: data.property_address || null,
-    rawError: owner.owner_name ? null : 'owner_name_missing',
-  };
+  const data = await assessorsearchFetch(path);
+  return parseLookupResponse(data, address);
 }
 
 /**

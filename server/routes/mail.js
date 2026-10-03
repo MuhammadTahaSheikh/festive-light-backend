@@ -6,6 +6,7 @@ import {
   updateCampaignHome,
 } from '../db/campaigns.js';
 import { getPostcardTemplate } from '../db/postcardTemplates.js';
+import { templateForMail } from '../services/postcardStarters.js';
 import { getRender, listRenders } from '../db/renders.js';
 import { buildPostcardForHome } from '../services/postcardPdf.js';
 import {
@@ -202,6 +203,7 @@ async function sendOnePostcard({
           frontUrl: urls.frontUrl,
           backUrl: urls.backUrl,
           description: description || home.address,
+          size: template.format || '6x9',
         })
       : await sendPostcardDemo({ homeId: render.id });
   } catch (e) {
@@ -281,12 +283,13 @@ router.post('/renders/verify-addresses', async (req, res) => {
 
 /** Send postcards for existing quotes/renders (Quotes page, widget renders, etc.). */
 router.post('/renders/send', async (req, res) => {
-  const { templateId = '', renderIds = [], demoConfirm = false, skipVerify = false } = req.body || {};
+  const { templateId = '', renderIds = [], demoConfirm = false, skipVerify = false, format } = req.body || {};
   if (!templateId) return res.status(400).json({ error: 'missing_template_id' });
 
   try {
-    const template = await getPostcardTemplate(templateId, accountKey(req));
-    if (!template) return res.status(404).json({ error: 'template_not_found' });
+    const saved = await getPostcardTemplate(templateId, accountKey(req));
+    if (!saved) return res.status(404).json({ error: 'template_not_found' });
+    const template = templateForMail(saved, format);
 
     const renders = await loadRendersByIds(renderIds);
     if (!renders.length) {
@@ -413,15 +416,16 @@ router.post('/campaigns/:id/reset-mail', async (req, res) => {
 });
 
 router.post('/campaigns/:id/send', async (req, res) => {
-  const { templateId = '', homeIds = [], demoConfirm = false, skipVerify = false } = req.body || {};
+  const { templateId = '', homeIds = [], demoConfirm = false, skipVerify = false, format } = req.body || {};
   if (!templateId) return res.status(400).json({ error: 'missing_template_id' });
 
   try {
     const campaign = await getCampaign(req.params.id);
     if (!campaign) return res.status(404).json({ error: 'campaign_not_found' });
 
-    const template = await getPostcardTemplate(templateId, accountKey(req));
-    if (!template) return res.status(404).json({ error: 'template_not_found' });
+    const saved = await getPostcardTemplate(templateId, accountKey(req));
+    if (!saved) return res.status(404).json({ error: 'template_not_found' });
+    const template = templateForMail(saved, format);
 
     const useLob = lobEnabled() && LOB_MAIL_MODE === 'live' && !demoConfirm;
     const homes = filterMailableHomes(await listCampaignHomes(req.params.id), { homeIds, liveOnly: useLob });

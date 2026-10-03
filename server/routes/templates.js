@@ -6,12 +6,18 @@ import {
   deletePostcardTemplate,
   cloneStarterTemplate,
 } from '../db/postcardTemplates.js';
+import { templateForMail } from '../services/postcardStarters.js';
 import { getRender } from '../db/renders.js';
 import { buildPostcardForHome } from '../services/postcardPdf.js';
 import { formatPrice, buildQuoteUrl } from '../services/postcardMerge.js';
 import { PUBLIC_BASE_URL } from '../config/env.js';
 
 const router = Router();
+
+router.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 
 function accountKey(req) {
   return req.headers['x-account-email'] || req.body?.accountEmail || 'default';
@@ -69,10 +75,11 @@ router.delete('/:id', async (req, res) => {
 });
 
 router.post('/:id/preview', async (req, res) => {
-  const { renderId = '' } = req.body || {};
+  const { renderId = '', format } = req.body || {};
   try {
-    const template = await getPostcardTemplate(req.params.id, accountKey(req));
-    if (!template) return res.status(404).json({ error: 'not_found' });
+    const saved = await getPostcardTemplate(req.params.id, accountKey(req));
+    if (!saved) return res.status(404).json({ error: 'not_found' });
+    const template = templateForMail(saved, format);
     const render = renderId ? await getRender(renderId) : null;
     const home = {
       id: render?.id || `preview-${req.params.id}`,

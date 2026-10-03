@@ -1,13 +1,124 @@
-/** Built-in 6×9 postcard layouts (Light Launch–style starters). Coordinates in inches on a 9×6 canvas. */
+/** Built-in postcard layouts. Coordinates in inches on the trim canvas. */
 
-export const POSTCARD_W_IN = 9;
-export const POSTCARD_H_IN = 6;
-/** Lob 6×9 files must include 1/8" bleed on each side (9.25 × 6.25). */
+import { LIGHTING_STARTERS } from './lightingStarters.js';
+import { NW_STARTERS } from './nwStarters.js';
+
 export const POSTCARD_BLEED_IN = 0.125;
-export const POSTCARD_PDF_W_IN = POSTCARD_W_IN + POSTCARD_BLEED_IN * 2;
-export const POSTCARD_PDF_H_IN = POSTCARD_H_IN + POSTCARD_BLEED_IN * 2;
+
+/** Lob postcard sizes (landscape trim). PDF adds 1/8" bleed on each side. */
+export const POSTCARD_SIZES = {
+  '4x6': { id: '4x6', label: '4×6', w: 6, h: 4 },
+  '6x9': { id: '6x9', label: '6×9', w: 9, h: 6 },
+  '6x11': { id: '6x11', label: '6×11', w: 11, h: 6 },
+};
+
+export const DEFAULT_POSTCARD_FORMAT = '6x9';
+
+export function postcardDims(format = DEFAULT_POSTCARD_FORMAT) {
+  const spec = POSTCARD_SIZES[format] || POSTCARD_SIZES[DEFAULT_POSTCARD_FORMAT];
+  return {
+    format: spec.id,
+    label: spec.label,
+    w: spec.w,
+    h: spec.h,
+    bleed: POSTCARD_BLEED_IN,
+    pdfW: spec.w + POSTCARD_BLEED_IN * 2,
+    pdfH: spec.h + POSTCARD_BLEED_IN * 2,
+    lobSize: spec.id,
+  };
+}
+
+export function normalizePostcardFormat(format) {
+  return postcardDims(format).format;
+}
+
+function scaleSideToFormat(side, from, to) {
+  if (!side) return side;
+  const sx = to.w / from.w;
+  const sy = to.h / from.h;
+  const s = Math.min(sx, sy);
+  const ox = (to.w - from.w * s) / 2;
+  const oy = (to.h - from.h * s) / 2;
+  return {
+    ...side,
+    elements: (side.elements || []).map((el) => ({
+      ...el,
+      x: ((el.x || 0) * s) + ox,
+      y: ((el.y || 0) * s) + oy,
+      w: (el.w || 0) * s,
+      h: (el.h || 0) * s,
+      fontSize: el.fontSize ? el.fontSize * s : el.fontSize,
+      strokeWidth: el.strokeWidth ? el.strokeWidth * s : el.strokeWidth,
+    })),
+  };
+}
+
+/**
+ * 6×9 and 6×11 share a 6" height. Fill the extra 2" of width:
+ * full-bleed art/photo stretches across 11", left column stays put,
+ * right column shifts right. Does not run for 4×6.
+ */
+function expandSixByNineToSixByEleven(side) {
+  if (!side) return side;
+  const fromW = 9;
+  const toW = 11;
+  const extra = toW - fromW;
+  const edge = 0.12;
+  return {
+    ...side,
+    elements: (side.elements || []).map((el) => {
+      const x = el.x || 0;
+      const w = el.w || 0;
+      const spansWidth = x <= edge && x + w >= fromW - edge;
+      const wideBand = w >= fromW * 0.82;
+      if (spansWidth) {
+        const next = { ...el, x: 0, w: toW };
+        if (el.type === 'image' && el.fit !== 'contain') next.fit = 'fill';
+        return next;
+      }
+      if (wideBand) {
+        return { ...el, w: w + extra };
+      }
+      if (x + w / 2 >= fromW / 2) {
+        return { ...el, x: Math.round((x + extra) * 1000) / 1000 };
+      }
+      return { ...el };
+    }),
+  };
+}
+
+/** Fit a saved layout onto a Lob size. Same size is a no-op. */
+export function templateForMail(template, format) {
+  if (!template) return template;
+  const from = postcardDims(template.format);
+  const to = postcardDims(format || template.format);
+  if (from.format === to.format) {
+    return { ...template, format: to.format };
+  }
+  if (from.format === '6x9' && to.format === '6x11') {
+    return {
+      ...template,
+      format: to.format,
+      front: expandSixByNineToSixByEleven(template.front),
+      back: expandSixByNineToSixByEleven(template.back),
+    };
+  }
+  return {
+    ...template,
+    format: to.format,
+    front: scaleSideToFormat(template.front, from, to),
+    back: scaleSideToFormat(template.back, from, to),
+  };
+}
+
+/** @deprecated Use postcardDims(format). Kept so 6×9 callers and tests stay stable. */
+export const POSTCARD_W_IN = POSTCARD_SIZES['6x9'].w;
+export const POSTCARD_H_IN = POSTCARD_SIZES['6x9'].h;
+export const POSTCARD_PDF_W_IN = postcardDims('6x9').pdfW;
+export const POSTCARD_PDF_H_IN = postcardDims('6x9').pdfH;
 
 export const STARTER_TEMPLATES = [
+  /* Hidden for now — Plain Render, This is YOUR house, Patriotic
   {
     id: 'starter-plain-render',
     name: 'Plain Render',
@@ -84,6 +195,9 @@ export const STARTER_TEMPLATES = [
       ],
     },
   },
+  */
+  ...LIGHTING_STARTERS,
+  ...NW_STARTERS,
 ];
 
 export function getStarterById(id) {

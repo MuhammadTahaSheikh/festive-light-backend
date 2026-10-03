@@ -82,7 +82,11 @@ app.use(express.json({ limit: '12mb' }));
 // Rendered images live in public/renders and are referenced as /renders/*.
 app.use('/renders', express.static(RENDERS_DIR));
 // Generated postcard PDFs for Lob / preview.
-app.use('/mail', express.static(path.join(PUBLIC_DIR, 'mail')));
+app.use('/mail', express.static(path.join(PUBLIC_DIR, 'mail'), {
+  setHeaders(res) {
+    res.setHeader('Cache-Control', 'no-store');
+  },
+}));
 // The ORIGINAL marketing site (landing + render widget) stays at the root.
 app.use(express.static(PUBLIC_DIR));
 // The React dashboard app is mounted under /app (built to client/dist with a
