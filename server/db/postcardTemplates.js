@@ -45,6 +45,22 @@ function cleanSides(payload) {
   };
 }
 
+function sanitizeLayouts(layouts) {
+  if (!layouts || typeof layouts !== 'object') return {};
+  const out = {};
+  for (const id of ['4x6', '6x9', '6x11']) {
+    const item = layouts[id];
+    if (!item?.front || !item?.back) continue;
+    const { __sizeLayouts: _frontMeta, ...front } = item.front;
+    const { __sizeLayouts: _backMeta, ...back } = item.back;
+    out[id] = {
+      front: stripCoveredRenderSlots(front),
+      back: stripCoveredRenderSlots(back),
+    };
+  }
+  return out;
+}
+
 async function listCustom(key) {
   if (supa && supaTableAvailable !== false) {
     const { data, error } = await supa
@@ -94,14 +110,16 @@ export async function savePostcardTemplate(accountKey, payload) {
   const key = normKey(accountKey);
   const now = new Date().toISOString();
   const cleaned = cleanSides(payload || {});
+  const layouts = sanitizeLayouts(cleaned.layouts);
   const row = {
     id: cleaned.id || crypto.randomUUID(),
     account_key: key,
     name: cleaned.name || 'Untitled template',
     category: cleaned.category || 'Uncategorized',
     format: normalizePostcardFormat(cleaned.format),
-    front: cleaned.front || { background: '#0b0b0d', elements: [] },
+    front: { ...(cleaned.front || { background: '#0b0b0d', elements: [] }), __sizeLayouts: layouts },
     back: cleaned.back || { background: '#141416', elements: [] },
+    layouts,
     is_starter: false,
     created_at: cleaned.created_at || now,
     updated_at: now,
@@ -112,6 +130,11 @@ export async function savePostcardTemplate(accountKey, payload) {
     if (error) {
       if (missingTableError(error)) {
         supaTableAvailable = false;
+      } else if (/layouts/i.test(String(error.message || ''))) {
+        const { layouts: _ignored, ...withoutColumn } = row;
+        const retry = await supa.from('postcard_templates').upsert(withoutColumn).select().maybeSingle();
+        if (retry.error) throw new Error(retry.error.message);
+        return retry.data || row;
       } else {
         throw new Error(error.message);
       }

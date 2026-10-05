@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseMailingAddress, formatPrice, mergeTemplateText } from '../services/postcardMerge.js';
 import { STARTER_TEMPLATES, POSTCARD_PDF_W_IN, POSTCARD_PDF_H_IN, postcardDims, normalizePostcardFormat, templateForMail } from '../services/postcardStarters.js';
 import { layoutAnchoredElements } from '../services/anchorLayout.js';
-import { personalizeFrontImage, elementPdfBox, renderPostcardPdfs } from '../services/postcardPdf.js';
+import { personalizeFrontImage, elementPdfBox, renderPostcardPdfs, templateFontToPt } from '../services/postcardPdf.js';
 
 describe('postcardMerge', () => {
   test('parseMailingAddress parses US format', () => {
@@ -148,6 +148,71 @@ describe('postcardMerge', () => {
     assert.equal(fitted.front.elements[0].h, 4);
   });
 
+  test('templateForMail fills a 4x6 layout across the 6x11 page', () => {
+    const fitted = templateForMail(
+      {
+        format: '4x6',
+        front: {
+          elements: [
+            { id: 'r1', type: 'render', x: 0, y: 0, w: 6, h: 4 },
+            { id: 'mascot', type: 'image', x: 4.9, y: 2.52, w: 1.05, h: 1.4, fit: 'contain' },
+          ],
+        },
+        back: {
+          elements: [
+            { id: 'wave', type: 'image', x: 0, y: 0, w: 6, h: 4, fit: 'fill' },
+            { id: 'body', type: 'text', x: 3.08, y: 0.9, w: 2.78, h: 1.38, fontSize: 5.3 },
+          ],
+        },
+      },
+      '6x11',
+    );
+    assert.equal(fitted.format, '6x11');
+    const r1 = fitted.front.elements.find((e) => e.id === 'r1');
+    assert.ok(Math.abs(r1.x) < 0.001);
+    assert.ok(Math.abs(r1.y) < 0.001);
+    assert.ok(Math.abs(r1.w - 11) < 0.001);
+    assert.ok(Math.abs(r1.h - 6) < 0.001);
+    const mascot = fitted.front.elements.find((e) => e.id === 'mascot');
+    assert.ok(Math.abs(mascot.x - (4.9 * 11) / 6) < 0.001);
+    assert.ok(Math.abs(mascot.y - 2.52 * 1.5) < 0.001);
+    assert.ok(Math.abs(mascot.h - 1.4 * 1.5) < 0.001);
+    assert.ok(mascot.x + mascot.w <= 11.01);
+    const wave = fitted.back.elements.find((e) => e.id === 'wave');
+    assert.ok(Math.abs(wave.x) < 0.001);
+    assert.ok(Math.abs(wave.w - 11) < 0.001);
+    assert.ok(Math.abs(wave.h - 6) < 0.001);
+    const body = fitted.back.elements.find((e) => e.id === 'body');
+    assert.ok(Math.abs(body.x - (3.08 * 11) / 6) < 0.001);
+    assert.ok(body.x + body.w <= 11.01);
+    assert.ok(Math.abs(body.fontSize - 5.3 * 1.5) < 0.001);
+  });
+
+  test('templateForMail fills a 4x6 layout that was saved as 6x9', () => {
+    const fitted = templateForMail(
+      {
+        format: '6x9',
+        front: { elements: [{ id: 'r1', type: 'render', x: 0, y: 0, w: 6, h: 4 }] },
+        back: { elements: [{ id: 'wave', type: 'image', x: 0, y: 0, w: 6, h: 4, fit: 'fill' }] },
+      },
+      '6x9',
+    );
+    assert.equal(fitted.format, '6x9');
+    assert.ok(Math.abs(fitted.front.elements[0].w - 9) < 0.001);
+    assert.ok(Math.abs(fitted.front.elements[0].h - 6) < 0.001);
+    assert.ok(Math.abs(fitted.back.elements[0].w - 9) < 0.001);
+    const eleven = templateForMail(
+      {
+        format: '6x9',
+        front: { elements: [{ id: 'r1', type: 'render', x: 0, y: 0, w: 6, h: 4 }] },
+        back: { elements: [] },
+      },
+      '6x11',
+    );
+    assert.ok(Math.abs(eleven.front.elements[0].w - 11) < 0.001);
+    assert.ok(Math.abs(eleven.front.elements[0].h - 6) < 0.001);
+  });
+
   test('templateForMail fills 6x11 width without changing 6x9 height', () => {
     const fitted = templateForMail(
       {
@@ -180,6 +245,54 @@ describe('postcardMerge', () => {
     assert.equal(fitted.back.elements.find((e) => e.id === 'wave').w, 11);
     assert.equal(fitted.back.elements.find((e) => e.id === 'wave').fit, 'fill');
     assert.equal(fitted.back.elements.find((e) => e.id === 'logo').x, 7.48);
+  });
+
+  test('templateForMail uses the saved layout for that size only', () => {
+    const fitted = templateForMail(
+      {
+        format: '6x11',
+        front: { elements: [{ id: 'r1', type: 'render', x: 0, y: 0, w: 11, h: 6 }] },
+        back: { elements: [] },
+        layouts: {
+          '4x6': {
+            front: { elements: [{ id: 'r1', type: 'render', x: 0, y: 0, w: 6, h: 4, fontSize: 10 }] },
+            back: { elements: [{ id: 'note', type: 'text', x: 0.2, y: 0.2, w: 2, h: 0.4, text: 'small' }] },
+          },
+          '6x11': {
+            front: { elements: [{ id: 'r1', type: 'render', x: 0.4, y: 0.2, w: 10, h: 5.4, fontSize: 22 }] },
+            back: { elements: [{ id: 'note', type: 'text', x: 1, y: 1, w: 4, h: 0.5, text: 'wide' }] },
+          },
+        },
+      },
+      '4x6',
+    );
+    assert.equal(fitted.format, '4x6');
+    assert.equal(fitted.front.elements[0].fontSize, 10);
+    assert.equal(fitted.front.elements[0].w, 6);
+    assert.equal(fitted.back.elements[0].text, 'small');
+    const eleven = templateForMail(
+      {
+        format: '4x6',
+        front: { elements: [{ id: 'r1', type: 'render', x: 0, y: 0, w: 6, h: 4 }] },
+        back: { elements: [] },
+        layouts: {
+          '6x11': {
+            front: { elements: [{ id: 'headline', type: 'text', x: 0.5, y: 0.3, w: 6, h: 0.4, fontSize: 30 }] },
+            back: { elements: [{ id: 'note', type: 'text', x: 0, y: 0, w: 1, h: 0.3 }] },
+          },
+        },
+      },
+      '6x11',
+    );
+    assert.equal(eleven.format, '6x11');
+    assert.equal(eleven.front.elements[0].id, 'headline');
+    assert.equal(eleven.front.elements[0].fontSize, 30);
+  });
+
+  test('template font size matches the editor canvas on the PDF', () => {
+    assert.equal(templateFontToPt({ fontSize: 100 }), 72);
+    assert.equal(templateFontToPt({ fontSize: 13 }), 13 * 0.72);
+    assert.equal(templateFontToPt({ fontSize: 8, follow: 'bubble' }), 8);
   });
 
   test('rendered PDF MediaBox matches selected size', async () => {

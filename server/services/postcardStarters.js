@@ -53,6 +53,25 @@ function scaleSideToFormat(side, from, to) {
   };
 }
 
+/** Stretch x with the width and y with the height so trim is filled edge to edge. */
+function scaleSideToFill(side, from, to) {
+  if (!side) return side;
+  const sx = to.w / from.w;
+  const sy = to.h / from.h;
+  return {
+    ...side,
+    elements: (side.elements || []).map((el) => ({
+      ...el,
+      x: (el.x || 0) * sx,
+      y: (el.y || 0) * sy,
+      w: (el.w || 0) * sx,
+      h: (el.h || 0) * sy,
+      fontSize: el.fontSize ? el.fontSize * sy : el.fontSize,
+      strokeWidth: el.strokeWidth ? el.strokeWidth * sy : el.strokeWidth,
+    })),
+  };
+}
+
 /**
  * 6×9 and 6×11 share a 6" height. Fill the extra 2" of width:
  * full-bleed art/photo stretches across 11", left column stays put,
@@ -87,27 +106,77 @@ function expandSixByNineToSixByEleven(side) {
   };
 }
 
-/** Fit a saved layout onto a Lob size. Same size is a no-op. */
+function sideExtent(side) {
+  let maxX = 0;
+  let maxY = 0;
+  for (const el of side?.elements || []) {
+    maxX = Math.max(maxX, (Number(el.x) || 0) + (Number(el.w) || 0));
+    maxY = Math.max(maxY, (Number(el.y) || 0) + (Number(el.h) || 0));
+  }
+  return { maxX, maxY };
+}
+
+/** Trim the elements actually fill, when the saved label is a larger card. */
+export function inferContentFormat(side, declared = DEFAULT_POSTCARD_FORMAT) {
+  const spec = POSTCARD_SIZES[declared] || POSTCARD_SIZES[DEFAULT_POSTCARD_FORMAT];
+  const { maxX, maxY } = sideExtent(side);
+  if ((side?.elements || []).length && maxX >= spec.w - 0.45 && maxY >= spec.h - 0.45) return spec.id;
+  if (maxX <= 6.45 && maxY <= 4.4) return '4x6';
+  if (maxX <= 9.45 && maxY <= 6.4) return '6x9';
+  return spec.id;
+}
+
+function fitSide(side, declared, toFormat) {
+  const from = postcardDims(inferContentFormat(side, declared));
+  const to = postcardDims(toFormat);
+  if (from.format === to.format) return side;
+  if (from.format === '6x9' && to.format === '6x11') return expandSixByNineToSixByEleven(side);
+  if (from.format === '4x6' && to.format === '6x11') return scaleSideToFill(side, from, to);
+  return scaleSideToFormat(side, from, to);
+}
+
+function stripSizeMeta(side) {
+  if (!side || typeof side !== 'object') return side;
+  const { __sizeLayouts, ...rest } = side;
+  return rest;
+}
+
+const POSTCARD_FORMAT_IDS = ['4x6', '6x9', '6x11'];
+
+/** Per-size layouts saved on the template, including the copy stored on front for older rows. */
+export function readStoredLayouts(template) {
+  const raw = template?.layouts && Object.keys(template.layouts).length
+    ? template.layouts
+    : template?.front?.__sizeLayouts;
+  if (!raw || typeof raw !== 'object') return null;
+  const out = {};
+  for (const id of POSTCARD_FORMAT_IDS) {
+    const item = raw[id];
+    if (!item?.front || !item?.back) continue;
+    out[id] = { front: stripSizeMeta(item.front), back: stripSizeMeta(item.back) };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Fit a saved layout onto a Lob size. A saved size is used as-is. */
 export function templateForMail(template, format) {
   if (!template) return template;
-  const from = postcardDims(template.format);
-  const to = postcardDims(format || template.format);
-  if (from.format === to.format) {
-    return { ...template, format: to.format };
-  }
-  if (from.format === '6x9' && to.format === '6x11') {
+  const declared = postcardDims(template.format).format;
+  const to = postcardDims(format || declared);
+  const exact = readStoredLayouts(template)?.[to.format];
+  if (exact?.front && exact?.back) {
     return {
       ...template,
       format: to.format,
-      front: expandSixByNineToSixByEleven(template.front),
-      back: expandSixByNineToSixByEleven(template.back),
+      front: stripSizeMeta(exact.front),
+      back: stripSizeMeta(exact.back),
     };
   }
   return {
     ...template,
     format: to.format,
-    front: scaleSideToFormat(template.front, from, to),
-    back: scaleSideToFormat(template.back, from, to),
+    front: fitSide(stripSizeMeta(template.front), declared, to.format),
+    back: fitSide(stripSizeMeta(template.back), declared, to.format),
   };
 }
 

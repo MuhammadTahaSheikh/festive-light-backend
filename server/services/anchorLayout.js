@@ -38,7 +38,8 @@ export function layoutAnchoredElements(elements = []) {
       .replace(/\{\{hi_name\}\}/g, 'Hi Dorothy,')
       .split('\n')
       .reduce((max, line) => Math.max(max, line.length), 1);
-    // Poppins Bold is about 0.52em wide and 1.5em tall per line.
+    // Poppins Bold is about 0.62em wide and 1.5em tall per line.
+    // Caps are PDF points. drawElement prints follow text at this size directly.
     const widthCap = (w * 72) / (0.62 * longest);
     const heightCap = (h * 72) / (1.5 * lines);
     const wanted = el.fontScale ? Number(el.fontScale) * h : (Number(el.fontSize) || heightCap);

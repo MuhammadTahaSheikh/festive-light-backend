@@ -16,6 +16,15 @@ import { ownerFirstName } from './ownerLookup.js';
 import { layoutAnchoredElements } from './anchorLayout.js';
 
 const IN = 72; // points per inch
+/** Editor canvas is 100px per inch. Template fontSize is those pixels, except speech-bubble copy. */
+const CANVAS_PX_PER_IN = 100;
+
+export function templateFontToPt(el) {
+  const size = Number(el?.fontSize) || 14;
+  // Anchored greeting fontSize is already in points (anchorLayout sizes it for the bubble).
+  if (el?.follow) return size;
+  return size * (IN / CANVAS_PX_PER_IN);
+}
 const FONT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fonts');
 const CUSTOM_FONTS = {
   Pacifico: path.join(FONT_DIR, 'Pacifico-Regular.ttf'),
@@ -235,7 +244,7 @@ async function drawElement(doc, el, ctx) {
   const dims = ctx.dims || postcardDims('6x9');
   const { x, y, w, h } = elementPdfBox(el, dims);
   const color = el.color || '#ffffff';
-  const fontSize = el.fontSize || 14;
+  const fontSize = templateFontToPt(el);
   const align = el.align || 'left';
 
   if (el.type === 'render') {
@@ -293,7 +302,7 @@ async function drawElement(doc, el, ctx) {
     width: w,
     height: h,
     align,
-    lineGap: el.lineGap ?? 0,
+    lineGap: (el.lineGap ?? 0) * (el.follow ? 1 : IN / CANVAS_PX_PER_IN),
   };
   let textY = y;
   if (el.follow) {

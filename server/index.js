@@ -89,19 +89,30 @@ app.use('/mail', express.static(path.join(PUBLIC_DIR, 'mail'), {
 }));
 // The ORIGINAL marketing site (landing + render widget) stays at the root.
 app.use(express.static(PUBLIC_DIR));
-// The React dashboard app is mounted under /app (built to client/dist with a
-// matching Vite base of '/app/'). In dev, Vite serves it on :5173 instead.
-if (fs.existsSync(CLIENT_DIST)) {
-  app.use('/app', express.static(CLIENT_DIST));
+// The React dashboard app is mounted under /app (Vite base '/app/').
+// A normal build writes the SPA at client/dist. The Vercel assembler
+// (`build:vercel`) nests it at client/dist/app and puts the marketing
+// page at client/dist/index.html. Serve whichever layout is present so
+// /app never falls through to that marketing page.
+function dashboardDist() {
+  const nested = path.join(CLIENT_DIST, 'app');
+  if (fs.existsSync(path.join(nested, 'index.html'))) return nested;
+  if (fs.existsSync(path.join(CLIENT_DIST, 'index.html'))) return CLIENT_DIST;
+  return null;
+}
+
+const DASHBOARD_DIST = dashboardDist();
+if (DASHBOARD_DIST) {
+  app.use('/app', express.static(DASHBOARD_DIST));
 }
 
 app.use('/api', api);
 
 // SPA fallback for the dashboard: any /app/* route serves the React index.html
 // (client-side routing). The original site at / is untouched.
-if (fs.existsSync(CLIENT_DIST)) {
+if (DASHBOARD_DIST) {
   app.get(['/app', '/app/*'], (_req, res) => {
-    res.sendFile(path.join(CLIENT_DIST, 'index.html'));
+    res.sendFile(path.join(DASHBOARD_DIST, 'index.html'));
   });
 }
 
