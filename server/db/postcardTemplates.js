@@ -24,8 +24,15 @@ function normKey(accountKey) {
 }
 
 function missingTableError(error) {
+  const code = String(error?.code || '');
+  if (code === '42P01' || code === 'PGRST205') return true;
   const msg = String(error?.message || error);
-  return /postcard_templates|schema cache|does not exist|PGRST/i.test(msg);
+  return /could not find the table|relation ["']?postcard_templates["']? does not exist/i.test(msg);
+}
+
+function layoutsColumnError(error) {
+  const msg = String(error?.message || error);
+  return error?.code === 'PGRST204' || /could not find the ['"]layouts['"] column/i.test(msg);
 }
 
 function listJson(key) {
@@ -126,18 +133,21 @@ export async function savePostcardTemplate(accountKey, payload) {
   if (supa) {
     const { data, error } = await supa.from('postcard_templates').upsert(row).select().maybeSingle();
     if (error) {
-      if (missingTableError(error)) {
-        // Keep going and store the JSON copy.
-      } else if (/layouts/i.test(String(error.message || ''))) {
+      if (layoutsColumnError(error)) {
         const { layouts: _ignored, ...withoutColumn } = row;
         const retry = await supa.from('postcard_templates').upsert(withoutColumn).select().maybeSingle();
         if (retry.error) throw new Error(retry.error.message);
-        return retry.data || row;
+        if (!retry.data) throw new Error('template_save_failed');
+        return retry.data;
+      }
+      if (missingTableError(error)) {
+        // Keep going and store the JSON copy.
       } else {
         throw new Error(error.message);
       }
     } else {
-      return data || row;
+      if (!data) throw new Error('template_save_failed');
+      return data;
     }
   }
 
