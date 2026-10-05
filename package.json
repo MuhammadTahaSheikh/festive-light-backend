@@ -16,6 +16,7 @@
     "setup:credits": "node scripts/setup-credits.js",
     "setup:outreach": "node scripts/setup-outreach-columns.js",
     "setup:created-by": "node scripts/setup-created-by.js",
+    "setup:postcards": "node scripts/setup-postcard-templates.js",
     "hooks:install": "node scripts/install-git-hooks.js",
     "push:split": "node scripts/sync-push-github.js"
   },

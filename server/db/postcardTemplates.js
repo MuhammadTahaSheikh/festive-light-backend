@@ -8,7 +8,7 @@ import { stripCoveredRenderSlots } from '../services/postcardPdf.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FILE = path.join(__dirname, '..', '..', 'data', 'postcard_templates.json');
 
-/** Cached after first Supabase miss — table may not exist until migration 003 is applied. */
+/** Cached after a successful read. A missing table is retried so a later migration is picked up without a restart. */
 let supaTableAvailable = supa ? null : false;
 
 function readAll() {
@@ -62,7 +62,7 @@ function sanitizeLayouts(layouts) {
 }
 
 async function listCustom(key) {
-  if (supa && supaTableAvailable !== false) {
+  if (supa) {
     const { data, error } = await supa
       .from('postcard_templates')
       .select('*')
@@ -70,7 +70,6 @@ async function listCustom(key) {
       .order('updated_at', { ascending: false });
     if (error) {
       if (missingTableError(error)) {
-        supaTableAvailable = false;
         return listJson(key).map(withFormat);
       }
       throw new Error(error.message);
@@ -91,11 +90,10 @@ export async function getPostcardTemplate(id, accountKey = 'default') {
   const starter = STARTER_TEMPLATES.find((t) => t.id === id);
   if (starter) return { ...starter, is_starter: true };
   const key = normKey(accountKey);
-  if (supa && supaTableAvailable !== false) {
+  if (supa) {
     const { data, error } = await supa.from('postcard_templates').select('*').eq('id', id).maybeSingle();
     if (error) {
       if (missingTableError(error)) {
-        supaTableAvailable = false;
         return withFormat(readAll().find((t) => t.id === id && (t.account_key || 'default') === key) || null);
       }
       throw new Error(error.message);
@@ -125,11 +123,11 @@ export async function savePostcardTemplate(accountKey, payload) {
     updated_at: now,
   };
 
-  if (supa && supaTableAvailable !== false) {
+  if (supa) {
     const { data, error } = await supa.from('postcard_templates').upsert(row).select().maybeSingle();
     if (error) {
       if (missingTableError(error)) {
-        supaTableAvailable = false;
+        // Keep going and store the JSON copy.
       } else if (/layouts/i.test(String(error.message || ''))) {
         const { layouts: _ignored, ...withoutColumn } = row;
         const retry = await supa.from('postcard_templates').upsert(withoutColumn).select().maybeSingle();
@@ -156,11 +154,11 @@ export async function deletePostcardTemplate(id, accountKey = 'default') {
   if (STARTER_TEMPLATES.some((t) => t.id === id)) {
     throw new Error('cannot_delete_starter');
   }
-  if (supa && supaTableAvailable !== false) {
+  if (supa) {
     const { error } = await supa.from('postcard_templates').delete().eq('id', id).eq('account_key', key);
     if (error) {
       if (missingTableError(error)) {
-        supaTableAvailable = false;
+        // Keep going and store the JSON copy.
       } else {
         throw new Error(error.message);
       }
