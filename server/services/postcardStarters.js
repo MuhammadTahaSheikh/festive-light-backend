@@ -1,6 +1,5 @@
 /** Built-in postcard layouts. Coordinates in inches on the trim canvas. */
 
-import { LIGHTING_STARTERS } from './lightingStarters.js';
 import { NW_STARTERS } from './nwStarters.js';
 
 export const POSTCARD_BLEED_IN = 0.125;
@@ -265,7 +264,6 @@ export const STARTER_TEMPLATES = [
     },
   },
   */
-  ...LIGHTING_STARTERS,
   ...NW_STARTERS,
 ];
 

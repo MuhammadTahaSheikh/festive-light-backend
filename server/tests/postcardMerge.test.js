@@ -44,11 +44,8 @@ describe('postcardMerge', () => {
   });
 
   test('starter templates have render slot on front', () => {
-    assert.equal(STARTER_TEMPLATES.length, 7);
+    assert.equal(STARTER_TEMPLATES.length, 4);
     assert.deepEqual(STARTER_TEMPLATES.map((t) => t.name), [
-      'lighting1',
-      'lighting2',
-      'lighting3',
       'Light Up Every Season',
       'Illuminate Every Moment',
       'Your Home, Your Lights',
@@ -56,9 +53,6 @@ describe('postcardMerge', () => {
     ]);
     for (const t of STARTER_TEMPLATES) {
       assert.ok(t.front?.elements?.some((e) => e.type === 'render'), t.name);
-    }
-    for (const t of STARTER_TEMPLATES.filter((t) => t.id.startsWith('starter-lighting'))) {
-      assert.equal(t.format, '6x9');
     }
     for (const t of STARTER_TEMPLATES.filter((t) => t.id.startsWith('starter-nw'))) {
       assert.equal(t.format, '4x6');
