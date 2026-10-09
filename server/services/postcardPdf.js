@@ -113,7 +113,7 @@ export function personalizeFrontImage(template) {
   if (elements.some((el) => el.type === 'render')) return template;
 
   const replacement = elements
-    .filter((el) => el.type === 'image' && (el.src || el.url))
+    .filter((el) => el.type === 'image' && !el.overlay && (el.src || el.url))
     .sort((a, b) => elementArea(b) - elementArea(a))[0];
   if (!replacement) return template;
 
@@ -126,6 +126,81 @@ export function personalizeFrontImage(template) {
         const { src, url, ...slot } = el;
         return { ...slot, type: 'render' };
       }),
+    },
+  };
+}
+
+function imageElementBuffer(el) {
+  const src = String(el?.src || el?.url || '');
+  if (src.startsWith('data:image')) {
+    const match = src.match(/^data:image\/[a-z0-9.+-]+;base64,(.*)$/i);
+    return match ? Buffer.from(match[1], 'base64') : null;
+  }
+  if (src.startsWith('/')) {
+    const fp = path.join(PUBLIC_DIR, src.replace(/^\//, ''));
+    if (fs.existsSync(fp)) return fs.readFileSync(fp);
+  }
+  return null;
+}
+
+/** A picture frame is a PNG with real transparency. It must stay above the house photo. */
+async function isFrameArtwork(el) {
+  if (el?.overlay) return true;
+  if (el?.type !== 'image' && el?.type !== 'logo') return false;
+  const buf = imageElementBuffer(el);
+  if (!buf) return false;
+  try {
+    const img = sharp(buf);
+    const meta = await img.metadata();
+    if (!meta.hasAlpha) return false;
+    const stats = await img.stats();
+    const alpha = stats.channels?.[3];
+    return Boolean(alpha && alpha.min < 250);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Opaque uploaded photos become the house slot. A transparent frame stays an
+ * overlay, with a house photo placed behind it when the template has none.
+ */
+export async function personalizeFrontForPrint(template) {
+  const front = template?.front;
+  let elements = [...(front?.elements || [])];
+  const frameIds = [];
+  for (const el of elements) {
+    if (await isFrameArtwork(el)) frameIds.push(el.id);
+  }
+  if (frameIds.length) {
+    elements = elements.map((el) => (frameIds.includes(el.id) ? { ...el, overlay: true } : el));
+  }
+  const withFrames = { ...template, front: { ...front, elements } };
+  if (elements.some((el) => el.type === 'render')) return withFrames;
+
+  const personalized = personalizeFrontImage(withFrames);
+  if (personalized.front.elements.some((el) => el.type === 'render')) return personalized;
+
+  const frame = elements
+    .filter((el) => frameIds.includes(el.id))
+    .sort((a, b) => elementArea(b) - elementArea(a))[0];
+  if (!frame) return withFrames;
+  return {
+    ...withFrames,
+    front: {
+      ...withFrames.front,
+      elements: [
+        {
+          id: `${frame.id}-house`,
+          type: 'render',
+          x: frame.x || 0,
+          y: frame.y || 0,
+          w: frame.w || 1,
+          h: frame.h || 1,
+          z: (Number(frame.z) || 1) - 1,
+        },
+        ...elements,
+      ],
     },
   };
 }
@@ -374,7 +449,7 @@ function sideToPdfBuffer(side, ctx) {
 export async function renderPostcardPdfs(template, ctx) {
   const dims = postcardDims(template?.format);
   const next = { ...ctx, dims };
-  const personalized = personalizeFrontImage(template);
+  const personalized = await personalizeFrontForPrint(template);
   const frontSide = personalized.front || {};
   const backSide = personalized.back || {};
   const [front, back, combined] = await Promise.all([

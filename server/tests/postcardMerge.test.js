@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { parseMailingAddress, formatPrice, mergeTemplateText } from '../services/postcardMerge.js';
 import { STARTER_TEMPLATES, POSTCARD_PDF_W_IN, POSTCARD_PDF_H_IN, postcardDims, normalizePostcardFormat, templateForMail } from '../services/postcardStarters.js';
 import { layoutAnchoredElements } from '../services/anchorLayout.js';
-import { personalizeFrontImage, elementPdfBox, renderPostcardPdfs, templateFontToPt } from '../services/postcardPdf.js';
+import sharp from 'sharp';
+import { personalizeFrontImage, personalizeFrontForPrint, elementPdfBox, renderPostcardPdfs, templateFontToPt } from '../services/postcardPdf.js';
 
 describe('postcardMerge', () => {
   test('parseMailingAddress parses US format', () => {
@@ -94,6 +95,30 @@ describe('postcardMerge', () => {
     assert.equal(house.type, 'render');
     assert.equal(house.src, undefined);
     assert.equal(personalized.front.elements.find((el) => el.id === 'logo').type, 'logo');
+  });
+
+  test('a transparent frame stays above a house photo', async () => {
+    const frame = await sharp({
+      create: { width: 8, height: 8, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    }).png().toBuffer();
+    const template = {
+      format: '4x6',
+      front: {
+        elements: [
+          { id: 'frame', type: 'image', x: 0, y: 0, w: 6, h: 4, z: 1, src: `data:image/png;base64,${frame.toString('base64')}` },
+          { id: 'mascot', type: 'image', x: 4, y: 2, w: 1.4, h: 1.3, z: 3, src: '/postcard-art/nw/mascot-season.png' },
+        ],
+      },
+      back: { elements: [] },
+    };
+    const printed = await personalizeFrontForPrint(template);
+    const kept = printed.front.elements.find((el) => el.id === 'frame');
+    const house = printed.front.elements.find((el) => el.type === 'render');
+    assert.equal(kept.type, 'image');
+    assert.equal(kept.overlay, true);
+    assert.ok(house);
+    assert.ok((house.z || 0) < (kept.z || 0));
+    assert.equal(printed.front.elements.find((el) => el.id === 'mascot').type, 'image');
   });
 
   test('Lob 6x9 PDF page includes 0.125in bleed', () => {
