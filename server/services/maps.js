@@ -207,10 +207,10 @@ export async function fetchStreetViewImage(target, options = {}) {
  */
 export async function findOutdoorPanos(lat, lng) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
-  const points = [{ lat, lng, radius: 60 }];
-  for (let bearing = 0; bearing < 360; bearing += 20) {
-    for (const dist of [50, 85]) {
-      points.push({ ...destinationPoint(lat, lng, bearing, dist), radius: 45 });
+  const points = [{ lat, lng, radius: 70 }];
+  for (let bearing = 0; bearing < 360; bearing += 30) {
+    for (const dist of [40, 80, 120]) {
+      points.push({ ...destinationPoint(lat, lng, bearing, dist), radius: 50 });
     }
   }
   const seen = new Map();
@@ -223,7 +223,7 @@ export async function findOutdoorPanos(lat, lng) {
         if (meta.status !== 'OK' || !meta.pano_id || !meta.location) continue;
         if (seen.has(meta.pano_id)) continue;
         const d = metersBetween(lat, lng, meta.location.lat, meta.location.lng);
-        if (d > 110) continue;
+        if (d > 140) continue;
         seen.set(meta.pano_id, {
           panoId: meta.pano_id,
           lat: meta.location.lat,
@@ -236,22 +236,50 @@ export async function findOutdoorPanos(lat, lng) {
     }
   }
   await Promise.all(Array.from({ length: 4 }, () => worker()));
-  const all = [...seen.values()].sort((a, b) => a.distanceM - b.distanceM);
-  if (!all.length) return [];
-  // The closest outdoor camera is the one Google Maps opens for this address.
-  // Cameras farther along the street look down the driveway from the side.
-  const nearest = all[0];
-  const usedSlices = new Set();
-  const backups = [];
-  for (const pano of all) {
-    if (pano.panoId === nearest.panoId) continue;
-    const slice = Math.round(computeHeading(lat, lng, pano.lat, pano.lng) / 45) % 8;
-    if (usedSlices.has(slice)) continue;
-    usedSlices.add(slice);
-    backups.push(pano);
-    if (backups.length >= 3) break;
+  return selectStreetViewPanos([...seen.values()]);
+}
+
+/**
+ * Keep several cameras, not only the closest one.
+ * On a deep lot the nearest camera often faces a hedge, while the next one
+ * down the street sees the front door. Cameras a few meters apart are the
+ * same spot, so those collapse into one.
+ */
+export function selectStreetViewPanos(panos, { limit = 8, minSeparationM = 8, maxDistanceM = 140 } = {}) {
+  const sorted = [...panos].sort((a, b) => a.distanceM - b.distanceM);
+  const kept = [];
+  for (const pano of sorted) {
+    if (!(pano.distanceM <= maxDistanceM)) continue;
+    const crowded = kept.some((k) => metersBetween(k.lat, k.lng, pano.lat, pano.lng) < minSeparationM);
+    if (crowded) continue;
+    kept.push(pano);
+    if (kept.length >= limit) break;
   }
-  return [nearest, ...backups];
+  return kept;
+}
+
+/**
+ * Does this camera direction look at the requested house, or at another one?
+ * The sample is taken near the target pin, not a few meters in front of the
+ * camera. On a deep lot the curb can belong to the next address while the
+ * house at the end of the view is the right one.
+ * @returns {'match' | 'other' | 'unknown'}
+ */
+export async function viewMatchesAddress(panoLat, panoLng, heading, address, target = {}) {
+  const want = houseNumberFromAddress(address);
+  if (!want || !Number.isFinite(Number(panoLat)) || !Number.isFinite(Number(panoLng))) return 'unknown';
+  const pLat = Number(panoLat);
+  const pLng = Number(panoLng);
+  const tLat = Number(target?.lat);
+  const tLng = Number(target?.lng);
+  const distToTarget = Number.isFinite(tLat) && Number.isFinite(tLng)
+    ? metersBetween(pLat, pLng, tLat, tLng)
+    : 40;
+  const sampleDist = Math.max(16, Math.min(distToTarget * 0.92, 90));
+  const sample = destinationPoint(pLat, pLng, Number(heading), sampleDist);
+  const hit = await reverseGeocodeStreetNumber(sample.lat, sample.lng);
+  if (!hit) return 'unknown';
+  return hit.number === want ? 'match' : 'other';
 }
 
 /** Street View frames. Index 0 is the Google Maps front camera, aimed level at the house. */

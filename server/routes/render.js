@@ -113,6 +113,18 @@ router.post('/', async (req, res) => {
       if (resolvedLat == null || resolvedLng == null) {
         return res.status(404).json({ error: 'address_not_found' });
       }
+      // Aim at the address rooftop. A map click can sit on the next house,
+      // and that is the photo that ended up on the postcard.
+      try {
+        const roof = await geocodeAddress(formattedAddress || address);
+        if (roof?.lat != null && roof?.lng != null) {
+          resolvedLat = roof.lat;
+          resolvedLng = roof.lng;
+          formattedAddress = roof.formattedAddress || formattedAddress || address;
+        }
+      } catch (e) {
+        console.warn('[render] rooftop snap skipped:', e.message);
+      }
       const sv = await resolveStreetViewForAddress(
         { lat: resolvedLat, lng: resolvedLng, address: formattedAddress },
         fetchStreetViewImage,

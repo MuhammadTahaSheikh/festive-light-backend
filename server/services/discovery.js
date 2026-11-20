@@ -31,8 +31,32 @@ function addressFromOsmTags(el) {
   return [`${num} ${street}`, city, region].filter(Boolean).join(', ');
 }
 
-function polygonToOverpass(polygon) {
-  return polygon.map((p) => `${p.lat} ${p.lng}`).join(' ');
+const AREA_CACHE = new Map();
+const AREA_CACHE_TTL_MS = 10 * 60 * 1000;
+
+function areaCacheKey(ring, limit) {
+  const parts = ring.map((p) => `${Number(p.lat).toFixed(5)},${Number(p.lng).toFixed(5)}`);
+  return `${limit}|${parts.join(';')}`;
+}
+
+function readAreaCache(key) {
+  const hit = AREA_CACHE.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > AREA_CACHE_TTL_MS) {
+    AREA_CACHE.delete(key);
+    return null;
+  }
+  return hit.result;
+}
+
+function storeAreaCache(key, result) {
+  if (!result?.returned) return result;
+  if (AREA_CACHE.size > 80) {
+    const oldest = AREA_CACHE.keys().next().value;
+    AREA_CACHE.delete(oldest);
+  }
+  AREA_CACHE.set(key, { at: Date.now(), result });
+  return result;
 }
 
 function dedupeByLocation(points, minDistM = 8) {
@@ -103,6 +127,15 @@ function samplePointsInPolygon(polygon, { spacingM = 28, maxPoints = 350 } = {})
     const scale = Math.sqrt(points.length / maxPoints);
     return samplePointsInPolygon(polygon, { spacingM: spacingM * scale, maxPoints });
   }
+  if (!points.length && polygon.length) {
+    const lat = polygon.reduce((s, p) => s + p.lat, 0) / polygon.length;
+    const lng = polygon.reduce((s, p) => s + p.lng, 0) / polygon.length;
+    points.push(
+      pointInPolygon(lat, lng, polygon)
+        ? { lat, lng }
+        : { lat: polygon[0].lat, lng: polygon[0].lng },
+    );
+  }
   return points;
 }
 
@@ -140,21 +173,22 @@ async function googleReverseGeocodeResidential(lat, lng) {
   return null;
 }
 
-async function discoverFromGoogleSamples(points, limit) {
+async function discoverFromGoogleSamples(points, limit, { concurrency = 4, budgetMs = 30000 } = {}) {
   if (!GOOGLE_MAPS_API_KEY || !points.length) return [];
   const hits = [];
   let idx = 0;
-  const concurrency = 4;
+  const deadline = Date.now() + budgetMs;
+  const workers = Math.min(concurrency, points.length);
   async function worker() {
     while (idx < points.length) {
+      if (Date.now() > deadline || hits.length >= limit) return;
       const i = idx++;
       const p = points[i];
       const hit = await googleReverseGeocodeResidential(p.lat, p.lng);
       if (hit) hits.push(hit);
-      if (i % concurrency === 0) await new Promise((r) => setTimeout(r, 120));
     }
   }
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  await Promise.all(Array.from({ length: workers }, () => worker()));
   return dedupeByLocation(dedupeByAddress(hits)).slice(0, limit);
 }
 
@@ -167,21 +201,23 @@ function closePolygonRing(polygon) {
 }
 
 async function discoverFromOsmPolygon(ring, limit) {
-  const polyStr = polygonToOverpass(ring);
-  const query = `[out:json][timeout:120];
+  const box = polygonBBox(ring);
+  // Bbox is cheaper than a polygon filter on the public servers, which rate-limit
+  // this host. Points outside a lasso are dropped below.
+  const query = `[out:json][timeout:18];
 (
-  way["building"](poly:"${polyStr}");
-  node["building"](poly:"${polyStr}");
-  relation["building"](poly:"${polyStr}");
+  way["building"](${box.minLat},${box.minLng},${box.maxLat},${box.maxLng});
+  node["building"](${box.minLat},${box.minLng},${box.maxLat},${box.maxLng});
 );
 out center;`;
 
-  const data = await overpassQuery(query);
+  const data = await overpassQuery(query, { timeoutMs: 8000, totalBudgetMs: 16000 });
+  const area = ring.slice(0, -1);
   const elements = data.elements || [];
   const centroids = [];
   for (const el of elements) {
     const c = centroidFromElement(el);
-    if (!c) continue;
+    if (!c || !pointInPolygon(c.lat, c.lng, area)) continue;
     const tagged = addressFromOsmTags(el);
     centroids.push(tagged ? { ...c, address: tagged } : c);
   }
@@ -329,18 +365,36 @@ export async function discoverInPolygon(polygon, limit = 500) {
     throw Object.assign(new Error('invalid_polygon'), { code: 'invalid_polygon' });
   }
   const ring = closePolygonRing(polygon);
+  const cacheKey = areaCacheKey(ring, limit);
+  const cached = readAreaCache(cacheKey);
+  if (cached) return cached;
 
-  const osm = await discoverFromOsmPolygon(ring, limit);
-  if (osm.returned > 0) return osm;
+  let osm = null;
+  let overpassDown = false;
+  try {
+    osm = await discoverFromOsmPolygon(ring, limit);
+  } catch {
+    // Public Overpass mirrors rate-limit the live server IP. Google still has the addresses.
+    overpassDown = true;
+  }
+  if (osm?.returned > 0) return storeAreaCache(cacheKey, osm);
 
-  const samplePoints = samplePointsInPolygon(ring.slice(0, -1));
-  const houses = await discoverFromGoogleSamples(samplePoints, limit);
-  return {
+  const sampleOpts = overpassDown
+    ? { spacingM: 28, maxPoints: 100 }
+    : { spacingM: 28, maxPoints: 350 };
+  const houses = await discoverFromGoogleSamples(
+    samplePointsInPolygon(ring.slice(0, -1), sampleOpts),
+    limit,
+    overpassDown
+      ? { concurrency: 8, budgetMs: 20000 }
+      : { concurrency: 4, budgetMs: 30000 },
+  );
+  return storeAreaCache(cacheKey, {
     total: houses.length,
     returned: houses.length,
     houses,
     source: houses.length ? 'google' : 'none',
-  };
+  });
 }
 
 /**
@@ -351,37 +405,40 @@ export async function discoverNeighbors(lat, lng, count = 250) {
     throw Object.assign(new Error('missing_location'), { code: 'missing_location' });
   }
   const radius = count >= 1000 ? 1200 : count >= 500 ? 800 : 500;
-  const query = `[out:json][timeout:120];
+  try {
+    const query = `[out:json][timeout:20];
 (
   way["building"](around:${radius},${lat},${lng});
   node["building"](around:${radius},${lat},${lng});
-  relation["building"](around:${radius},${lat},${lng});
 );
 out center;`;
 
-  const data = await overpassQuery(query);
-  const elements = data.elements || [];
-  const withDist = [];
-  for (const el of elements) {
-    const c = centroidFromElement(el);
-    if (!c) continue;
-    const tagged = addressFromOsmTags(el);
-    withDist.push({ ...c, d: distM(lat, lng, c.lat, c.lng), ...(tagged ? { address: tagged } : {}) });
-  }
-  withDist.sort((a, b) => a.d - b.d);
-  const unique = dedupeByLocation(withDist).slice(0, count);
-  const osmHouses = await geocodeWithConcurrency(unique);
-  if (osmHouses.length > 0) {
-    return {
-      total: withDist.length,
-      returned: osmHouses.length,
-      houses: osmHouses,
-      source: 'osm',
-    };
+    const data = await overpassQuery(query, { timeoutMs: 8000, totalBudgetMs: 16000 });
+    const elements = data.elements || [];
+    const withDist = [];
+    for (const el of elements) {
+      const c = centroidFromElement(el);
+      if (!c) continue;
+      const tagged = addressFromOsmTags(el);
+      withDist.push({ ...c, d: distM(lat, lng, c.lat, c.lng), ...(tagged ? { address: tagged } : {}) });
+    }
+    withDist.sort((a, b) => a.d - b.d);
+    const unique = dedupeByLocation(withDist).slice(0, count);
+    const osmHouses = await geocodeWithConcurrency(unique);
+    if (osmHouses.length > 0) {
+      return {
+        total: withDist.length,
+        returned: osmHouses.length,
+        houses: osmHouses,
+        source: 'osm',
+      };
+    }
+  } catch {
+    // Same live-IP rate limit as area draw. Fall through to Google.
   }
 
-  const samplePoints = samplePointsInCircle(lat, lng, radius);
-  const houses = await discoverFromGoogleSamples(samplePoints, count);
+  const samplePoints = samplePointsInCircle(lat, lng, radius, { maxPoints: 120 });
+  const houses = await discoverFromGoogleSamples(samplePoints, count, { concurrency: 6, budgetMs: 20000 });
   return {
     total: houses.length,
     returned: houses.length,

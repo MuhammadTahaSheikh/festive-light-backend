@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { GEMINI_API_KEY } from '../config/env.js';
 import { fetchBuildingSqft } from './property.js';
-import { fetchFacadeCandidates } from './maps.js';
+import { fetchFacadeCandidates, viewMatchesAddress } from './maps.js';
 
 const genai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 // gemini-2.0-flash was shut down June 2026; use a current Flash model for the vision check.
@@ -14,9 +14,9 @@ Reply with ONLY compact JSON, no markdown:
 or
 {"houseVisible": false, "reason": "brief reason"}
 
-Set houseVisible to TRUE only when a clear building facade (home, townhome, or commercial building) is visible and large enough that roofline lights could be installed along its eaves or architectural edges.
+Set houseVisible to TRUE when a house facade is recognizable: front door, columns, porch, or the main wall and roof edge are visible. Trees in the yard may overlap the house. That is still TRUE when the facade itself can be seen.
 
-Set FALSE when the view is mostly road, street, pavement, parking lot, empty lot, field, water, sky, the building is too far away or too small, trees fully block the structure, or no building front is facing the camera.`;
+Set FALSE when the view is mostly road, pavement, empty lot, field, water, sky, or a solid hedge, the building is only a tiny sliver at the edge, trees hide the whole facade, or no building front faces the camera.`;
 
 function parseHouseVisible(text) {
   const match = String(text || '').match(/\{[\s\S]*\}/);
@@ -32,9 +32,11 @@ const FACADE_PROMPT = `Each frame is a Street View photo aimed at the same house
 Classify every frame. Reply ONLY JSON:
 {"best":0,"frames":[{"index":0,"kind":"front"},{"index":1,"kind":"angle"}]}
 kind "front" = straight-on from the street, front door and facade centered, the way Google Maps opens the address.
-kind "angle" = the same house seen from the side, down the driveway, or at a sharp corner angle.
+kind "angle" = the same house seen from the side, the garage, down the driveway, or at a sharp corner angle.
 kind "neighbor" = a different house or garage fills the frame.
-kind "blocked" = trees, hedges, or road, with no clear house facade.
+kind "blocked" = trees, hedges, or road, with no clear house facade. A hedge with only a sliver of a different roof is blocked.
+kind "neighbor" = a different house or garage fills the frame.
+kind "front" = straight-on from the street, front door and facade centered and large, the way Google Maps opens the address.
 best must be a "front" frame when one exists. Never pick "angle" or "neighbor" when a "front" frame exists.`;
 
 function parseFacadeIndex(text, count) {
@@ -87,19 +89,6 @@ async function pickFrontFacade(frames) {
   }
 }
 
-function alternateHeadings(baseHeading) {
-  const base = ((Number(baseHeading) % 360) + 360) % 360;
-  const offsets = [0, 90, -90, 180];
-  const seen = new Set();
-  return offsets
-    .map((o) => Math.round((base + o + 360) % 360))
-    .filter((h) => {
-      if (seen.has(h)) return false;
-      seen.add(h);
-      return true;
-    });
-}
-
 function footprintOk(building) {
   return Boolean(building?.sqft > 0 || building?.perimeterFt > 0);
 }
@@ -136,7 +125,8 @@ async function streetViewShowsHouse(imageBuffer, mimeType) {
 }
 
 /**
- * Fetch Street View for an address, rotate through headings, and reject road-only views.
+ * Fetch Street View for an address. Cameras aimed at a different house are dropped.
+ * A hedge in front of the right house is not a reason to turn around and use the neighbor.
  * @param {{ lat: number, lng: number, address?: string }} target
  * @param {Function} fetchFn maps.fetchStreetViewImage
  * @param {{ skipVisualCheck?: boolean }} [options] When true (address preview), return the
@@ -170,16 +160,15 @@ export async function resolveStreetViewForAddress(target, fetchFn, options = {})
     frames = [primary];
   }
 
-  // Google Maps' own front camera already faces this house number. Keep it.
-  const matchedFront = frames.find((frame) => frame.facesTarget);
-  if (matchedFront) {
-    if (skipVisualCheck) return frameResult(matchedFront, building);
-    const visual = await streetViewShowsHouse(matchedFront.buffer, matchedFront.mimeType);
-    if (visual.ok) return frameResult(matchedFront, building);
-  }
+  const tagged = await Promise.all(frames.map(async (sv) => ({
+    sv,
+    match: await viewMatchesAddress(sv.panoLat, sv.panoLng, sv.heading, target.address, target),
+  })));
+  const usable = tagged.filter((t) => t.match !== 'other').map((t) => t.sv);
+  if (!usable.length) return { ok: false, status: 'NO_HOUSE_VISIBLE' };
 
-  const best = frames.length > 1 ? await pickFrontFacade(frames) : 0;
-  const ordered = [frames[best], ...frames.filter((_, i) => i !== best)];
+  const best = usable.length > 1 ? await pickFrontFacade(usable) : 0;
+  const ordered = [usable[best], ...usable.filter((_, i) => i !== best)];
 
   if (skipVisualCheck) return frameResult(ordered[0], building);
 
@@ -188,23 +177,6 @@ export async function resolveStreetViewForAddress(target, fetchFn, options = {})
     if (!visual.ok) continue;
     const hasFootprint = footprintOk(building);
     if (!hasFootprint && visual.method === 'skipped') continue;
-    return frameResult(sv, building);
-  }
-
-  // Same camera, other compass directions, when every aimed frame was trees or road.
-  const fallback = ordered[0];
-  for (const heading of alternateHeadings(fallback.heading)) {
-    const sv = heading === fallback.heading
-      ? fallback
-      : await fetchFn(target, {
-        heading,
-        panoId: fallback.panoId,
-        panoLat: fallback.panoLat,
-        panoLng: fallback.panoLng,
-      });
-    if (!sv?.ok) continue;
-    const visual = await streetViewShowsHouse(sv.buffer, sv.mimeType);
-    if (!visual.ok) continue;
     return frameResult(sv, building);
   }
 
