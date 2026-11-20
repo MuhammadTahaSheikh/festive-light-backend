@@ -18,6 +18,19 @@ function centroidFromElement(el) {
   return { lat, lng };
 }
 
+function addressFromOsmTags(el) {
+  const tags = el?.tags || {};
+  const num = String(tags['addr:housenumber'] || '').trim();
+  const street = String(tags['addr:street'] || '').trim();
+  if (!num || !street || !/^\d/.test(num)) return null;
+  const city = String(tags['addr:city'] || tags['addr:town'] || '').trim();
+  const state = String(tags['addr:state'] || '').trim();
+  const st = state.length === 2 ? state.toUpperCase() : state;
+  const zip = String(tags['addr:postcode'] || '').trim();
+  const region = [st, zip].filter(Boolean).join(' ');
+  return [`${num} ${street}`, city, region].filter(Boolean).join(', ');
+}
+
 function polygonToOverpass(polygon) {
   return polygon.map((p) => `${p.lat} ${p.lng}`).join(' ');
 }
@@ -119,11 +132,8 @@ async function googleReverseGeocodeResidential(lat, lng) {
     url.searchParams.set('key', GOOGLE_MAPS_API_KEY);
     url.searchParams.set('result_type', 'street_address|premise|subpremise');
     const data = await fetch(url).then((r) => r.json());
-    for (const r of data.results || []) {
-      const hasNumber = (r.address_components || []).some((c) => c.types?.includes('street_number'));
-      if (!hasNumber || !r.formatted_address) continue;
-      return { lat, lng, address: r.formatted_address };
-    }
+    const hit = closestStreetAddress(data.results, lat, lng);
+    if (hit) return { lat, lng, address: hit.address };
   } catch {
     /* ignore */
   }
@@ -171,11 +181,77 @@ out center;`;
   const centroids = [];
   for (const el of elements) {
     const c = centroidFromElement(el);
-    if (c) centroids.push(c);
+    if (!c) continue;
+    const tagged = addressFromOsmTags(el);
+    centroids.push(tagged ? { ...c, address: tagged } : c);
   }
   const unique = dedupeByLocation(centroids).slice(0, limit);
   const houses = await geocodeWithConcurrency(unique);
   return { total: centroids.length, returned: houses.length, houses, source: 'osm' };
+}
+
+const HOUSE_MATCH_M = 40;
+
+function closestStreetAddress(results, clickLat, clickLng) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const r of results || []) {
+    const hasNumber = (r.address_components || []).some((c) => c.types?.includes('street_number'));
+    if (!hasNumber || !r.formatted_address) continue;
+    const lat = Number(r.geometry?.location?.lat);
+    const lng = Number(r.geometry?.location?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const d = distM(clickLat, clickLng, lat, lng);
+    if (d < bestDist) {
+      bestDist = d;
+      best = r.formatted_address;
+    }
+  }
+  if (!best || bestDist > HOUSE_MATCH_M) return null;
+  return { address: best, lat: clickLat, lng: clickLng };
+}
+
+async function googleHouseAt(lat, lng) {
+  if (!GOOGLE_MAPS_API_KEY) return null;
+  try {
+    const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+    url.searchParams.set('latlng', `${lat},${lng}`);
+    url.searchParams.set('key', GOOGLE_MAPS_API_KEY);
+    const open = await fetch(url).then((r) => r.json());
+    const hit = closestStreetAddress(open.results, lat, lng);
+    if (hit) return hit;
+    url.searchParams.set('result_type', 'street_address|premise|subpremise');
+    const filtered = await fetch(url).then((r) => r.json());
+    return closestStreetAddress(filtered.results, lat, lng);
+  } catch {
+    return null;
+  }
+}
+
+async function nominatimHouseAt(lat, lng) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+    const data = await fetch(url, { headers: { 'User-Agent': USER_AGENT } }).then((r) => r.json());
+    const a = data?.address;
+    if (!a?.house_number) return null;
+    const line1 = [a.house_number, a.road].filter(Boolean).join(' ');
+    if (!/^\d/.test(line1)) return null;
+    const city = a.city || a.town || a.village || a.hamlet || a.suburb || '';
+    const state = a.state || '';
+    const st = state.length === 2 ? state.toUpperCase() : state;
+    const zip = a.postcode || '';
+    const region = [st, zip].filter(Boolean).join(' ');
+    const address = [line1, city, region].filter(Boolean).join(', ');
+    return address ? { address, lat, lng } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Street address under a map click. Pin stays on the click. */
+export async function lookupHouseAtPoint(lat, lng) {
+  if (lat == null || lng == null) return null;
+  return (await googleHouseAt(lat, lng)) || (await nominatimHouseAt(lat, lng));
 }
 
 export async function reverseGeocode(lat, lng) {
@@ -187,12 +263,8 @@ export async function reverseGeocode(lat, lng) {
       url.searchParams.set('result_type', 'street_address|premise|subpremise');
       const data = await fetch(url).then((r) => r.json());
       if (data.status === 'OK') {
-        for (const r of data.results || []) {
-          const hasNumber = (r.address_components || []).some((c) => c.types?.includes('street_number'));
-          if (hasNumber && r.formatted_address) return r.formatted_address;
-        }
-        const addr = data.results?.[0]?.formatted_address;
-        if (addr) return addr;
+        const hit = closestStreetAddress(data.results, lat, lng);
+        if (hit?.address) return hit.address;
       }
     } catch {
       /* fall through */
@@ -238,7 +310,7 @@ async function geocodeWithConcurrency(points, concurrency = 4) {
     while (idx < points.length) {
       const i = idx++;
       const p = points[i];
-      const address = await reverseGeocode(p.lat, p.lng);
+      const address = p.address || await reverseGeocode(p.lat, p.lng);
       results[i] = { lat: p.lat, lng: p.lng, address };
       if (i % concurrency === 0) await new Promise((r) => setTimeout(r, 120));
     }
@@ -293,7 +365,8 @@ out center;`;
   for (const el of elements) {
     const c = centroidFromElement(el);
     if (!c) continue;
-    withDist.push({ ...c, d: distM(lat, lng, c.lat, c.lng) });
+    const tagged = addressFromOsmTags(el);
+    withDist.push({ ...c, d: distM(lat, lng, c.lat, c.lng), ...(tagged ? { address: tagged } : {}) });
   }
   withDist.sort((a, b) => a.d - b.d);
   const unique = dedupeByLocation(withDist).slice(0, count);

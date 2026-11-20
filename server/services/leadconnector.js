@@ -59,7 +59,7 @@ function resolveRenderFile(imageUrl) {
   return full;
 }
 
-async function imageDataUri(imageUrl) {
+export async function imageDataUri(imageUrl) {
   const filePath = resolveRenderFile(imageUrl);
   if (!filePath) return '';
 
@@ -79,6 +79,51 @@ async function imageDataUri(imageUrl) {
     console.warn('[leadconnector] image encode failed:', e.message);
     return '';
   }
+}
+
+/**
+ * Prefer an embedded data-URI so GHL/email clients don't need to fetch
+ * /renders from PUBLIC_BASE_URL (often the Vercel frontend, which has no files).
+ */
+export function buildHousePlannerHtmlEmail({
+  name = '',
+  address = '',
+  imageUrl = '',
+  imageSrc = '',
+  footage = 0,
+} = {}) {
+  const safeName = escapeHtml(name);
+  const safeAddress = escapeHtml(address);
+  const src = String(imageSrc || '').trim() || absolutizeUrl(imageUrl);
+  const greeting = safeName ? `Hi ${safeName},` : 'Hi,';
+  const feet = Number.isFinite(Number(footage)) && Number(footage) > 0
+    ? Math.round(Number(footage))
+    : 0;
+
+  return `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f6f6f4;font-family:Georgia,serif;">
+  <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
+    <p style="margin:0 0 8px;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#888;">Festive Lighting Pros</p>
+    <h1 style="margin:0 0 12px;font-size:26px;font-weight:normal;color:#1a1a1a;">Your light plan</h1>
+    <p style="margin:0 0 20px;font-size:16px;color:#444;line-height:1.5;">
+      ${greeting} here's the marked lighting plan${safeAddress ? ` for <strong>${safeAddress}</strong>` : ''} we prepared for you.
+    </p>
+    ${src
+      ? `<img src="${src.startsWith('data:') ? src : escapeHtml(src)}" alt="House light plan" style="width:100%;max-width:560px;height:auto;border-radius:4px;display:block;" />`
+      : ''}
+    ${feet
+      ? `<p style="margin:16px 0 8px;font-size:15px;color:#333;"><strong>Measured footage</strong></p>
+         <ul style="margin:0;padding-left:18px;font-size:15px;color:#333;line-height:1.6;">
+           <li>Total lit run: <strong>${feet} ft</strong></li>
+         </ul>`
+      : ''}
+    <p style="margin:28px 0 0;font-size:13px;color:#888;line-height:1.5;">
+      Questions? Call (941) 239-7919.
+    </p>
+  </div>
+</body>
+</html>`;
 }
 
 export function buildConsultationHtmlEmail({

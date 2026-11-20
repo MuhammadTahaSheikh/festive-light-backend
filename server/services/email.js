@@ -28,7 +28,8 @@ function getTransporter() {
     transporter = nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
-      secure: SMTP_SECURE,
+      secure: SMTP_SECURE, // true only for 465; Mailjet 587 uses STARTTLS
+      requireTLS: !SMTP_SECURE && Number(SMTP_PORT) === 587,
       auth: SMTP_USER ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
     });
   }

@@ -35,27 +35,39 @@ function houseNumberFromAddress(address) {
   return m ? m[1].toUpperCase() : '';
 }
 
+function streetNumberFromResult(result) {
+  const comp = (result?.address_components || []).find((c) => c.types?.includes('street_number'));
+  if (comp?.short_name) {
+    return {
+      number: String(comp.short_name).toUpperCase(),
+      formatted: result.formatted_address || '',
+    };
+  }
+  const fromFormatted = houseNumberFromAddress(result?.formatted_address);
+  if (!fromFormatted) return null;
+  return { number: fromFormatted, formatted: result.formatted_address || '' };
+}
+
 async function reverseGeocodeStreetNumber(lat, lng) {
   const url = new URL('https://maps.googleapis.com/maps/api/geocode/json');
   url.searchParams.set('latlng', `${lat},${lng}`);
   url.searchParams.set('result_type', 'street_address|premise');
   url.searchParams.set('key', GOOGLE_MAPS_API_KEY);
   const data = await fetch(url).then((r) => r.json()).catch(() => null);
-  const results = data?.results || [];
-  for (const r of results) {
-    const comp = (r.address_components || []).find((c) => c.types?.includes('street_number'));
-    if (comp?.short_name) {
-      return {
-        number: String(comp.short_name).toUpperCase(),
-        formatted: r.formatted_address || '',
-      };
-    }
-    const fromFormatted = houseNumberFromAddress(r.formatted_address);
-    if (fromFormatted) {
-      return { number: fromFormatted, formatted: r.formatted_address || '' };
+  let best = null;
+  let bestDist = Infinity;
+  for (const r of data?.results || []) {
+    const hit = streetNumberFromResult(r);
+    const loc = r.geometry?.location;
+    if (!hit || !Number.isFinite(loc?.lat) || !Number.isFinite(loc?.lng)) continue;
+    const d = metersBetween(lat, lng, loc.lat, loc.lng);
+    if (d < bestDist) {
+      bestDist = d;
+      best = hit;
     }
   }
-  return null;
+  if (!best || bestDist > 35) return null;
+  return best;
 }
 
 /**
@@ -106,31 +118,58 @@ async function fetchStreetViewMetadata(locParam, radiusMeters) {
   return metaResp.json();
 }
 
+function metersBetween(aLat, aLng, bLat, bLng) {
+  const dLat = (bLat - aLat) * 111320;
+  const dLng = (bLng - aLng) * 111320 * Math.cos((aLat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+
 /**
  * Fetch a Street View image aimed at the target home.
  * @param {{ lat: number, lng: number, address?: string }} target
- * @param {{ heading?: number }} [options]
+ * @param {{ heading?: number, panoId?: string, panoLat?: number, panoLng?: number, aimAtTarget?: boolean, fov?: number, pitch?: number }} [options]
  */
 export async function fetchStreetViewImage(target, options = {}) {
   const locParam = streetViewLocationParam(target);
-  if (!locParam) return { ok: false, status: 'ZERO_RESULTS' };
+  if (!locParam && !options.panoId) return { ok: false, status: 'ZERO_RESULTS' };
 
-  // Prefer a tight radius so dense suburbs don't pick a neighbor's camera;
-  // widen once if nothing is found.
-  let meta = await fetchStreetViewMetadata(locParam, 40);
-  if (meta.status !== 'OK' || !meta.location) {
-    meta = await fetchStreetViewMetadata(locParam, 80);
-  }
-  if (meta.status !== 'OK' || !meta.location) {
-    return { ok: false, status: meta.status };
+  let panoId = options.panoId || null;
+  let panoLat = Number(options.panoLat);
+  let panoLng = Number(options.panoLng);
+
+  if (!panoId || !Number.isFinite(panoLat) || !Number.isFinite(panoLng)) {
+    // Prefer a tight radius so dense suburbs don't pick a neighbor's camera;
+    // widen once if nothing is found.
+    let meta = await fetchStreetViewMetadata(locParam, 40);
+    if (meta.status !== 'OK' || !meta.location) {
+      meta = await fetchStreetViewMetadata(locParam, 80);
+    }
+    if (meta.status !== 'OK' || !meta.location) {
+      return { ok: false, status: meta.status };
+    }
+    panoId = meta.pano_id;
+    panoLat = meta.location.lat;
+    panoLng = meta.location.lng;
   }
 
-  const panoLat = meta.location.lat;
-  const panoLng = meta.location.lng;
   let heading;
   let verifiedAddress = null;
+  let facesTarget = false;
   if (options.heading != null) {
     heading = Math.round(Number(options.heading));
+  } else if (options.aimAtTarget && Number.isFinite(target.lat) && Number.isFinite(target.lng)) {
+    heading = Math.round(computeHeading(panoLat, panoLng, target.lat, target.lng));
+    if (options.verifyFacing) {
+      const want = houseNumberFromAddress(target.address);
+      if (want) {
+        const sample = destinationPoint(panoLat, panoLng, heading, 18);
+        const hit = await reverseGeocodeStreetNumber(sample.lat, sample.lng);
+        if (hit?.number === want) {
+          verifiedAddress = hit.formatted;
+          facesTarget = true;
+        }
+      }
+    }
   } else {
     const aimed = await facadeHeading(panoLat, panoLng, target.lat, target.lng, target.address);
     heading = aimed.heading;
@@ -139,13 +178,11 @@ export async function fetchStreetViewImage(target, options = {}) {
 
   const imgUrl = new URL('https://maps.googleapis.com/maps/api/streetview');
   imgUrl.searchParams.set('size', '640x640');
-  if (meta.pano_id) imgUrl.searchParams.set('pano', meta.pano_id);
+  if (panoId) imgUrl.searchParams.set('pano', panoId);
   else imgUrl.searchParams.set('location', locParam);
   imgUrl.searchParams.set('heading', String(heading));
-  // Narrower FOV so one suburban lot usually dominates the frame.
-  imgUrl.searchParams.set('fov', '55');
-  // Slight upward pitch helps capture full roofline on taller buildings.
-  imgUrl.searchParams.set('pitch', '5');
+  imgUrl.searchParams.set('fov', String(options.fov ?? 55));
+  imgUrl.searchParams.set('pitch', String(options.pitch ?? 5));
   imgUrl.searchParams.set('source', 'outdoor');
   imgUrl.searchParams.set('key', GOOGLE_MAPS_API_KEY);
   const imgResp = await fetch(imgUrl);
@@ -156,9 +193,87 @@ export async function fetchStreetViewImage(target, options = {}) {
     buffer: buf,
     mimeType: 'image/jpeg',
     heading,
-    panoId: meta.pano_id,
+    panoId,
+    panoLat,
+    panoLng,
     verifiedAddress,
+    facesTarget,
   };
+}
+
+/**
+ * Outdoor cameras around a house. The closest one is first — that is the
+ * camera Google Maps uses for a straight-on front view.
+ */
+export async function findOutdoorPanos(lat, lng) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
+  const points = [{ lat, lng, radius: 60 }];
+  for (let bearing = 0; bearing < 360; bearing += 20) {
+    for (const dist of [50, 85]) {
+      points.push({ ...destinationPoint(lat, lng, bearing, dist), radius: 45 });
+    }
+  }
+  const seen = new Map();
+  let cursor = 0;
+  async function worker() {
+    while (cursor < points.length) {
+      const point = points[cursor++];
+      try {
+        const meta = await fetchStreetViewMetadata(`${point.lat},${point.lng}`, point.radius);
+        if (meta.status !== 'OK' || !meta.pano_id || !meta.location) continue;
+        if (seen.has(meta.pano_id)) continue;
+        const d = metersBetween(lat, lng, meta.location.lat, meta.location.lng);
+        if (d > 110) continue;
+        seen.set(meta.pano_id, {
+          panoId: meta.pano_id,
+          lat: meta.location.lat,
+          lng: meta.location.lng,
+          distanceM: d,
+        });
+      } catch {
+        /* try the other probe points */
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: 4 }, () => worker()));
+  const all = [...seen.values()].sort((a, b) => a.distanceM - b.distanceM);
+  if (!all.length) return [];
+  // The closest outdoor camera is the one Google Maps opens for this address.
+  // Cameras farther along the street look down the driveway from the side.
+  const nearest = all[0];
+  const usedSlices = new Set();
+  const backups = [];
+  for (const pano of all) {
+    if (pano.panoId === nearest.panoId) continue;
+    const slice = Math.round(computeHeading(lat, lng, pano.lat, pano.lng) / 45) % 8;
+    if (usedSlices.has(slice)) continue;
+    usedSlices.add(slice);
+    backups.push(pano);
+    if (backups.length >= 3) break;
+  }
+  return [nearest, ...backups];
+}
+
+/** Street View frames. Index 0 is the Google Maps front camera, aimed level at the house. */
+export async function fetchFacadeCandidates(target) {
+  const panos = await findOutdoorPanos(target.lat, target.lng);
+  const frames = await Promise.all(panos.map(async (pano, i) => {
+    const frontCamera = i === 0;
+    try {
+      return await fetchStreetViewImage(target, {
+        panoId: pano.panoId,
+        panoLat: pano.lat,
+        panoLng: pano.lng,
+        aimAtTarget: true,
+        verifyFacing: frontCamera,
+        fov: frontCamera ? 80 : 70,
+        pitch: frontCamera ? 0 : 6,
+      });
+    } catch {
+      return null;
+    }
+  }));
+  return frames.filter((sv) => sv?.ok);
 }
 
 export async function geocodeAddress(address) {

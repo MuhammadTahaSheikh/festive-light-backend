@@ -10,6 +10,7 @@ import discoveryRoutes from './discovery.js';
 import creditsRoutes from './credits.js';
 import templatesRoutes from './templates.js';
 import mailRoutes from './mail.js';
+import housePlannerRoutes from './housePlanner.js';
 
 const api = Router();
 
@@ -17,6 +18,7 @@ api.use(healthRoutes);
 api.use('/auth', authRoutes);
 api.use('/places', placesRoutes);
 api.use('/render', renderRoutes);
+api.use('/house-planner', housePlannerRoutes);
 api.use('/lead', leadRouter);
 api.use('/leads', leadsRouter);
 api.use(quotesRoutes);
